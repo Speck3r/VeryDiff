@@ -5,6 +5,7 @@ using LinearAlgebra
 #using SparseArrays
 using VNNLib
 #using ThreadPinning
+using PolynomialRoots
 
 using GLPK
 
@@ -45,6 +46,7 @@ include("Definitions.jl")
 include("Util.jl")
 include("Network.jl")
 include("Zonotope.jl")
+include("Remez.jl")
 include("Layers_Zonotope.jl")
 include("Layers_DiffZonotope.jl")
 include("MultiThreadding.jl")

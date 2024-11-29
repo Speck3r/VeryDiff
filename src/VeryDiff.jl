@@ -5,6 +5,7 @@ using LinearAlgebra
 #using SparseArrays
 using VNNLib
 #using ThreadPinning
+using CSV
 using PolynomialRoots
 
 using GLPK

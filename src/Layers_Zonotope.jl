@@ -86,3 +86,64 @@ function (L::ReLU)(Z :: Zonotope, P :: PropState; bounds = nothing)
     return Zonotope(Ĝ, ĉ, influence_new)
     end
 end
+
+
+function (L::Poly)(Z::Zonotope, P::PropState; bounds=nothing)
+    return @timeit to "Zonotope_PolyProp" begin
+        @timeit to "Bounds" begin
+            row_count = size(Z.G, 1)
+            if isnothing(bounds)
+                bounds = zono_bounds(Z)
+            end
+            lower = @view bounds[:, 1]
+            upper = @view bounds[:, 2]
+        end
+
+        @timeit to "Vectors" begin
+            nonlinmask = .~islinear.(eachrow(L.coeffs))
+            λ = copy(L.coeffs[:,2])
+            β = copy(L.coeffs[:,1])
+            γ = zeros(row_count)
+
+            # TODO is there a better way than eachrow()?
+            res = VeryDiff.approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), lower[nonlinmask], upper[nonlinmask])
+            λ[nonlinmask] .= getindex.(res, 1)  # slope of the input
+            β[nonlinmask] .= getindex.(res, 2)  # bias 
+            γ[nonlinmask] .= getindex.(res, 3)  # new error
+
+            ĉ = λ .* Z.c .+ β
+        end
+
+        @timeit to "Influence Matrix" begin
+            if NEW_HEURISTIC
+                # TODO(steuber): Can we avoid this reallocation?
+                @timeit to "Allocation" begin
+                    influence_new = zeros(Float64, size(Z.influence, 1), size(Z.influence, 2) + row_count)
+                end
+                @timeit to "Set Matrix" begin
+                    influence_new[:, 1:size(Z.influence, 2)] .= Z.influence
+                end
+                @timeit to "Multiply" begin
+                    influence_new[:, (size(Z.influence, 2)+1):end] .= abs.(Z.influence) * abs.(Z.G)'
+                end
+            else
+                influence_new = Z.influence
+            end
+        end
+
+        @timeit to "Allocation" begin
+            Ĝ = zeros(Float64, row_count, size(Z.G, 2) + row_count)
+        end
+        #Z.G .*= λ
+        @timeit to "Set Matrix" begin
+            Ĝ[:, 1:size(Z.G, 2)] .= Z.G
+            Ĝ[:, size(Z.G, 2)+1:end] .= I(row_count)
+        end
+        @timeit to "Column Multiply" begin
+            Ĝ[:, 1:size(Z.G, 2)] .*= λ
+            Ĝ[:, size(Z.G, 2)+1:end] .*= abs.(γ)
+        end
+
+        return Zonotope(Ĝ, ĉ, influence_new)
+    end
+end

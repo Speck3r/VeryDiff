@@ -6,7 +6,11 @@ function (N::Network)(Z :: Zonotope, P :: PropState)
     return foldl((Z,L) -> L(Z,P),N.layers,init=Z)
 end
 
-function (L::Dense)(Z :: Zonotope,P :: PropState)
+function (N::Network)(Z::Zonotope, P::PropState, bounds::AbstractVector)
+    foldl((Z,t) -> t[1](Z,P,bounds=t[2]), zip(N.layers, bounds), init=Z)
+end
+
+function (L::Dense)(Z :: Zonotope,P :: PropState; bounds=nothing)
     return @timeit to "Zonotope_DenseProp" begin
     G = L.W * Z.G
     c = L.W * Z.c .+ L.b

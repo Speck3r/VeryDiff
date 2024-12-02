@@ -2,7 +2,7 @@ import VNNLib.NNLoader.Network
 import VNNLib.NNLoader.Dense
 import VNNLib.NNLoader.ReLU
 
-function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope, P::PropState)
+function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
     #println("Prop dense")
     return @timeit to "DiffZonotope_DenseProp" begin
     #println("Dense")
@@ -48,7 +48,7 @@ function two_generator_bound(G::Matrix{Float64}, b, H::Matrix{Float64})
     return [sum(j->abs(G[i,j]+b*H[i,j]),1:size(G,2)) for i in 1:size(G,1)]
 end
 
-function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::PropState)
+function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
     #println("Prop relu")
     return @timeit to "DiffZonotope_ReLUProp" begin
     #println("ReLU")
@@ -374,7 +374,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
 end
 
 
-function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, P::PropState)
+function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
     return @timeit to "DiffZonotope_PolyReLUProp" begin
         L1, LΔ, L2 = Ls
         Debugger.@pre_diffzono_prop_hook Z context="Pre PolyReLU"
@@ -390,8 +390,24 @@ function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, 
         lower₂ = @view bounds₂[:,1]
         upper₂ = @view bounds₂[:,2]
 
+        @assert all(lower₁ .<= upper₁) "Zonotope bounds: lower bound for x is larger than upper bound for x"
+        @assert all(lower₂ .<= upper₂) "Zonotope bounds: lower bound for y is larger than upper bound for y"
+
+        if ~isnothing(bounds_x)
+            lower₁ .= max.(lower₁, bounds_x[:,1])
+            upper₁ .= min.(upper₁, bounds_x[:,2])
+        end
+
+        if ~isnothing(bounds_y)
+            lower₂ .= max.(lower₂, bounds_y[:,1])
+            upper₂ .= min.(upper₂, bounds_y[:,2])
+        end
+
+        @assert all(lower₁ .<= upper₁) "Stored bounds: lower bound for x is larger than upper bound for x"
+        @assert all(lower₂ .<= upper₂) "Stored bounds: lower bound for y is larger than upper bound for y"
+
         if TIGHTEN_BOUNDS_DIFF[]
-            # use bounds on x - y to potentially tighten bounds
+            # use bounds on x - y to potentially tighten bounds in individual networks
 
             # Δ = x - y 
             # x = Δ + y 
@@ -413,6 +429,9 @@ function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, 
 
             lower₂ .= max.(lower₂, bounds_y[:,1])
             upper₂ .= min.(upper₂, bounds_y[:,2])
+
+            @assert all(lower₁ .<= upper₁) "Tightened bounds: lower bound for x is larger than upper bound for x"
+            @assert all(lower₂ .<= upper₂) "Tightened bounds: lower bound for y is larger than upper bound for y"
         end
 
 
@@ -532,4 +551,11 @@ end
 function (N::GeminiNetwork)(Z :: DiffZonotope, P :: PropState)
     #println("Prop network")
     return foldl((Z,Ls) -> propagate_diff_layer(Ls,Z,P),zip(N.network1.layers,N.diff_network.layers,N.network2.layers),init=Z)
+end
+
+
+function (N::GeminiNetwork)(Z::DiffZonotope, P::PropState, bounds_x::Union{Nothing,AbstractVector}, bounds_y::Union{Nothing,AbstractVector})
+    bounds_x = isnothing(bounds_x) ? [nothing for i in 1:length(N.network1.layers)] : bounds_x
+    bounds_y = isnothing(bounds_y) ? [nothing for i in 1:length(N.network2.layers)] : bounds_y
+    foldl((Z,t) -> propagate_diff_layer(t[1], Z, P, bounds_x=t[2], bounds_y=t[3]), zip(zip(N.network1.layers, N.diff_network.layers, N.network2.layers), bounds_x, bounds_y), init=Z)
 end

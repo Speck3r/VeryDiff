@@ -21,6 +21,18 @@ end
 isactivation(L::Poly) = true
 
 
+struct PolyReLU{N} <: VNNLib.Layer where {N<:Number}
+    coeffs::Array{N}
+end
+
+
+function (L::PolyReLU)(x::Vector{N}) where {N<:Number}
+    y₁ = Poly(L.coeffs)(x)
+    y₂ = max.(zero(N), x)
+    y₁ .- y₂
+end
+
+
 """
 Reads coefficients of polynomials for a given onnx model and polynomial coefficients in a set of csv files.
 

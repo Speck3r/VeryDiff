@@ -66,16 +66,18 @@ struct GeminiNetwork
         end
         @assert length(network1.layers) == length(network2.layers)
         for (l1, l2) in zip(network1.layers, network2.layers)
-            @assert typeof(l1) == typeof(l2)
+            @assert (typeof(l1) == typeof(l2)) || ((typeof(l1) <: Poly) && (typeof(l2) == ReLU)) "l1: $(typeof(l1)), l2: $(typeof(l2))"
             if typeof(l1) == Dense
                 @assert size(l1.W) == size(l2.W) "Mismatch in weight matrix size: $(size(l1.W)) vs $(size(l2.W))"
                 @assert size(l1.b) == size(l2.b)
                 push!(diff_layers, Dense(l1.W .- l2.W, l1.b .- l2.b))
                 println("Distance: ", sum(abs,diff_layers[end].W))
-            elseif typeof(l1) == ReLU
+            elseif (typeof(l1) == ReLU) && (typeof(l2) == ReLU)
                 push!(diff_layers, ReLU())
+            elseif (typeof(l1) <: Poly) && (typeof(l2) == ReLU)
+                push!(diff_layers, PolyReLU(l1.coeffs))
             else
-                error("Unsupported layer type")
+                error("Unsupported layer types! l1 = ", typeof(l1), ", l2 = ", typeof(l2))
             end
         end
         return new(network1, network2, Network(diff_layers))

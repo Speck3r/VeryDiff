@@ -7,6 +7,7 @@ using VNNLib
 #using ThreadPinning
 using CSV
 using PolynomialRoots
+using Optim
 
 using GLPK
 
@@ -44,9 +45,9 @@ using Gurobi
 const GRB_ENV = Ref{Any}(nothing)
 
 include("Debugger.jl")
-include("Util.jl")
-include("Network.jl")
 include("Definitions.jl")
+include("Network.jl")
+include("Util.jl")
 include("Zonotope.jl")
 include("Remez.jl")
 include("PolynomialDifferenceRelaxation.jl")

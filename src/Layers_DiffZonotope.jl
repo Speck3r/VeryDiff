@@ -374,7 +374,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
 end
 
 
-function propagate_diff_layer(Ls :: Tuple{ReLU,PolyReLU,ReLU}, Z::DiffZonotope, P::PropState)
+function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, P::PropState)
     return @timeit to "DiffZonotope_PolyReLUProp" begin
         L1, LΔ, L2 = Ls
         Debugger.@pre_diffzono_prop_hook Z context="Pre PolyReLU"
@@ -401,17 +401,20 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,PolyReLU,ReLU}, Z::DiffZonotope, 
             ∂lower = @view ∂bounds[:,1]
             ∂upper = @view ∂bounds[:,2]
 
-            zero_diff = ∂upper .== 0.0 .&& ∂lower .== 0.0
+            # for p(x) - ReLU(x), we can't just return zero like in ReLU(x)-ReLU(x),
+            # but have to treat it just like everything else.
+            #zero_diff = ∂upper .== 0.0 .&& ∂lower .== 0.0
 
             # Compute Phase Behaviour
-            check = copy(zero_diff)
+            check = fill(false, output_dim)
+            #check = copy(zero_diff)
 
             neg = (upper₂ .<= 0.) .&& .!check
             check .|= neg
-            pos = (lower₂ .> 0) .&& .!check 
+            pos = (lower₂ .>= 0) .&& .!check 
             check .|= pos 
             unstable = (lower₂ .< 0) .&& (upper₂ .> 0) .&& .!check 
-            check .|= unstable 
+            check .|= unstable
             @assert all(check) "Not all cases covered!"
         
             if USE_REWRITE_DIFF[]
@@ -452,10 +455,10 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,PolyReLU,ReLU}, Z::DiffZonotope, 
                     @assert false "Not implemented yet!"
                 else
                     # p(x) - ReLU(y) = p(x) - y -> just subtract the individual zonotopes
-                    Ĝ[selector, 1:input_dim] .= (@view Z₁_new.G[selector,1:input_dim] .- Z₂_new.G[selector,1:input_dim])
+                    Ĝ[selector, 1:input_dim] .= (@view Z₁_new.G[selector,1:input_dim]) .- (@view Z₂_new.G[selector,1:input_dim])
                     Ĝ[selector, input_dim+1:input_dim+1+num_approx₁] .= (@view Z₁_new.G[selector,input_dim+1:end])
                     Ĝ[selector, input_dim+1+num_approx₁:input_dim+1+num_approx₁+num_approx₂] .-= (@view Z₂_new.G[selector,input_dim+1:end])
-                    ĉ[selector] .= (@view Z₁_new.c[selector] .- Z₂_new.c[selector])
+                    ĉ[selector] .= (@view Z₁_new.c[selector]) .- (@view Z₂_new.c[selector])
                 end
             end
 
@@ -464,22 +467,25 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,PolyReLU,ReLU}, Z::DiffZonotope, 
             if any(selector)
                 Debugger.@diffrelu_case_hook unstable context="Unstable"
                 
-                a, b, c, ϵ = find_good_poly_diff_approx.(lower₁, upper₁, ∂lower, ∂upper, eachrow(LΔ.coeffs))
+                # why is there no better way to handle broadcasted tuples?
+                res = find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], ∂lower[selector], ∂upper[selector], eachrow(LΔ.coeffs[selector,:]))
+                a = getindex.(res, 1)  # slope of x
+                b = getindex.(res, 2)  # slope of Δ 
+                c = getindex.(res, 3)  # bias 
+                ϵ = getindex.(res, 4)  # new error term
 
                 # a*ex + b*eΔ
-                Ĝ[selector, 1:input_dim] .= (@view a .* Z.Z₁.G[selector, 1:input_dim] .+ b .* Z.∂Z.G[selector, 1:input_dim])
+                Ĝ[selector, 1:input_dim] .= a .* (@view Z.Z₁.G[selector, 1:input_dim]) .+ b .* (@view Z.∂Z.G[selector, 1:input_dim])
                 # a*a'x + b*a'Δ
-                Ĝ[selector, input_dim+1:input_dim+Z.num_approx₁] .= (@view a .* Z.Z₁.G[selector, input_dim+1:end] .+ 
-                                                                        b .* Z.∂Z.G[selector, input_dim+1:input_dim+Z.num_approx₁])
-                offset += Z.num_approx₁
+                Ĝ[selector, input_dim+1:input_dim+Z.num_approx₁] .= a .* (@view Z.Z₁.G[selector, input_dim+1:end]) .+ 
+                                                                        b .* (@view Z.∂Z.G[selector, input_dim+1:input_dim+Z.num_approx₁])
                 # b*a''Δ
-                Ĝ[selector, input_dim+num_approx₁:input_dim+num_approx₁+Z.num_approx₂] .= (@view b .* Z.∂Z.G[selector, input_dim+Z.num_approx₁+1:input_dim+Z.num_approx₁+Z.num_approx₂])
-                offset += Z.num_approx₂
+                Ĝ[selector, input_dim+num_approx₁+1:input_dim+num_approx₁+Z.num_approx₂] .= b .* (@view Z.∂Z.G[selector, input_dim+Z.num_approx₁+1:input_dim+Z.num_approx₁+Z.num_approx₂])
                 # (b*aΔ | δ)
-                Ĝ[selector, input_dim+num_approx₁+num_approx₂+1:end-∂num_approx_additional] .= (@view b .* Z.∂Z.G[selector, input_dim+Z.num_approx₁+Z.num_approx₂+1:end])
-                Ĝ[selector, end-∂num_approx_additional:end] .= I(count(selector)) .* ϵ
+                Ĝ[selector, input_dim+num_approx₁+num_approx₂+1:end-∂num_approx_additional] .= b .* (@view Z.∂Z.G[selector, input_dim+Z.num_approx₁+Z.num_approx₂+1:end])
+                Ĝ[selector, end-∂num_approx_additional+1:end] .= I(count(selector)) .* ϵ
 
-                ĉ[selector] .= (@view a .* Z.Z₁.c .+ b .* Z.∂Z.c .+ c)
+                ĉ[selector] .= a .* (@view Z.Z₁.c[selector]) .+ b .* (@view Z.∂Z.c[selector]) .+ c
             end
 
             if FIRST_ROUND

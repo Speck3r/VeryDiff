@@ -390,6 +390,32 @@ function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, 
         lower₂ = @view bounds₂[:,1]
         upper₂ = @view bounds₂[:,2]
 
+        if TIGHTEN_BOUNDS_DIFF[]
+            # use bounds on x - y to potentially tighten bounds
+
+            # Δ = x - y 
+            # x = Δ + y 
+            Gx = hcat(Z.∂Z.G[:,1:input_dim] .+ Z.Z₂.G[:,1:input_dim], Z.∂Z.G[:,input_dim+1:input_dim+Z.num_approx₁],
+                  Z.∂Z.G[:,input_dim+Z.num_approx₁+1:input_dim+Z.num_approx₁+Z.num_approx₂] .+ Z.Z₂.G[:,input_dim+1:input_dim+Z.num_approx₂],
+                  Z.∂Z.G[:,end-Z.∂num_approx+1:end])
+            cx = Z.∂Z.c .+ Z.Z₂.c
+            Zx = Zonotope(Gx, cx, nothing)
+            bounds_x = zono_bounds(Zx)
+
+            lower₁ .= max.(lower₁, bounds_x[:,1])
+            upper₁ .= min.(upper₁, bounds_x[:,2])
+
+            # y = x - Δ
+            Gy = hcat(Z.Z₁.G[:,1:input_dim+Z.num_approx₁] .- Z.∂Z.G[:,1:input_dim+Z.num_approx₁], .-Z.∂Z.G[:,input_dim+Z.num_approx₁+1:end])
+            cy = Z.Z₁.c .- Z.∂Z.c
+            Zy = Zonotope(Gy, cy, nothing)
+            bounds_y = zono_bounds(Zy)
+
+            lower₂ .= max.(lower₂, bounds_y[:,1])
+            upper₂ .= min.(upper₂, bounds_y[:,2])
+        end
+
+
         # Compute Zonotopes for individual networks
         Z₁_new = L1(Z.Z₁,P;bounds = bounds₁)
         Z₂_new = L2(Z.Z₂,P;bounds = bounds₂)

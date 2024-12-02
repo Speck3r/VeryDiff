@@ -15,7 +15,12 @@ NEW_HEURISTIC = true
 USE_GUROBI = true
 
 USE_DIFFZONO = true
+
+"""use p(x) - ReLU(y) = p(x) - (x - Δ) in the active ReLU case instead of p(x) - y"""
 const USE_REWRITE_DIFF = Ref{Bool}(false)
+
+"""use bounds from difference zonotope to tighten individual network bounds"""
+const TIGHTEN_BOUNDS_DIFF = Ref{Bool}(false)
 
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()

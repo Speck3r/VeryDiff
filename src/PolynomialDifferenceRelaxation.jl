@@ -98,7 +98,7 @@ args:
 returns:
     vector of 2d critical points 
 """
-function relax_diff_inact(boundary, ps::Vector{N}, a::N, b::N) where N<:Number
+function relax_diff_inact(boundary, ps::AbstractVector{N}, a::N, b::N) where N<:Number
     dps = dpoly(ps)
     # d/dx p(x) - ax
     dpa = copy(dps)
@@ -107,9 +107,18 @@ function relax_diff_inact(boundary, ps::Vector{N}, a::N, b::N) where N<:Number
     critical_points = copy(boundary)
     if b == 0
         # extremum in interior is only possible if b == 0
-        rs = real_roots(dpa)
+        lx = minimum(first.(boundary))
+        ux = maximum(first.(boundary))
+        lΔ = minimum(last.(boundary))
+        uΔ = maximum(last.(boundary))
+        # if the derivative is the 0 polynomial, then the original polynomial is constant
+        # so it doesn't matter where we evaluate it, just choose some point within the bounds
+        rs = all(dpa .== 0) ? [0.5 * (lx + ux)] : real_roots(dpa)
         rs = rs[(lx .<= rs) .& (rs .<= ux)]
-        length(rs) > 0 && push!(critical_points, rs...)
+        # if b == 0, we have p(x) - ax and we get the same value everywhere regardless of Δ, 
+        # so we just need to choose a feasible value of Δ.
+        # since we are in the x ≤ Δ case, we need Δ to be at least as large as x
+        length(rs) > 0 && push!(critical_points, [(r, clamp(0.5*(lΔ + uΔ), r, uΔ)) for r in rs]...)
     end
 
     # boundary
@@ -127,7 +136,7 @@ function relax_diff_inact(boundary, ps::Vector{N}, a::N, b::N) where N<:Number
         elseif Δ0 == Δ1
             # Δ is constant
             # f(x, Δ) = p(x) - ax - bΔ is just a function of x
-            xs = real_roots(dpa)          
+            xs = all(dpa .== 0) ? [0.5 * (lxi + uxi)] : real_roots(dpa)          
             xs = xs[(lxi .<= xs) .& (xs .<= uxi)]
             if length(xs) > 0
                 for x in xs
@@ -139,7 +148,7 @@ function relax_diff_inact(boundary, ps::Vector{N}, a::N, b::N) where N<:Number
             # f(x, Δ) = f(t) = p(t) - (a + b)t
             dpab = copy(dps)
             dpab[1] -= a + b
-            ts = real_roots(dpab)
+            ts = all(dpab .== 0) ? [0.5 * (max(lxi, lΔi) + min(uxi, uΔi))] : real_roots(dpab)
             ts = ts[(lxi .<= ts) .& (ts .<= uxi) .& (lΔi .<= ts) .& (ts .<= uΔi)]
             if length(ts) > 0
                 for t in ts

@@ -14,6 +14,7 @@ NEW_HEURISTIC = true
 USE_GUROBI = true
 
 USE_DIFFZONO = true
+const USE_REWRITE_DIFF = Ref{Bool}(false)
 
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()
@@ -43,12 +44,12 @@ using Gurobi
 const GRB_ENV = Ref{Any}(nothing)
 
 include("Debugger.jl")
-include("Definitions.jl")
 include("Util.jl")
 include("Network.jl")
 include("Definitions.jl")
 include("Zonotope.jl")
 include("Remez.jl")
+include("PolynomialDifferenceRelaxation.jl")
 include("Layers_Zonotope.jl")
 include("Layers_DiffZonotope.jl")
 include("MultiThreadding.jl")

@@ -45,14 +45,40 @@ args:
 function real_roots(ps)
     @assert any(ps .!= 0) "Zero polynomial has roots everywhere! PolynomialRoots is not able to handle that!"
     rs = roots(ps)
-    return Float64.(rs[imag.(rs) .== 0])
+    return real.(rs[abs.(imag.(rs)) .< IMAG_TOL[]])
+end
+
+
+function ensure_alternating_signs(ys)
+    n_sing_changes = count(ys[1:end-1] .* ys[2:end] .< 0)
+    inds = zeros(Int, n_sing_changes + 1)
+    cnt = 1
+    y_prev = ys[1]
+    prev_ind = 1
+    for (i, y) in enumerate(ys[2:end])
+        if sign(y_prev) == sign(y)
+            if abs(y) > abs(y_prev)
+                prev_ind = i+1  # because we started at 2
+                y_prev = y 
+            end
+        else
+            inds[cnt] = prev_ind
+            cnt += 1
+            y_prev = y
+            prev_ind = i+1
+        end
+    end
+
+    inds[end] = prev_ind
+
+    return inds
 end
 
 
 """
 Computes extrema of polynomials p(x) - q(x) over the interval [l, u].
 
-If two consecutive extrema have the same sign, throw the outer one away. (Do we always want that for Remez?)
+If two consecutive extrema have the same sign, keep the one with larger absolute value.
 
 args:
     ps - coefficients of the polynomial to be approximated in order [p₀, p₁, ...]
@@ -80,22 +106,9 @@ function poly_error(ps, qs, l, u)
     xs = xs[perm]
     ys = eval_poly.(xs)
 
-    # TODO: is this valid? 
-    # only want alternating minima/maxima, if we have 2 maxxes in one interval
-    # then we don't need the boundary
-    if ys[end-1]*ys[end] > 0
-        # they have the same sign and are not 0
-        xs = xs[1:end-1]
-        ys = ys[1:end-1]
-    end
+    inds = ensure_alternating_signs(ys)
 
-    if ys[1]*ys[2] > 0
-        # they have the same sign and are not 0
-        xs = xs[2:end]
-        ys = ys[2:end]
-    end
-
-    return xs, ys
+    return xs[inds], ys[inds]
 end
 
 
@@ -132,10 +145,17 @@ function remez(f, f_error, l, u, degree; max_iter=10, verbosity=0, opt_tol=1.05)
         ϵ = b[end]
 
         x_error, y_error = f_error(p̂, l, u)
+        ϵ = maximum(abs.(y_error))
+        # TODO: what if we have less than degree+2 extrema? (can happen if we try to approx a linear function by a higher order poly)
+        # we want the degree+2 extrema of alternating sign with largest possible absolute value 
+        # TODO: this may not find the best alternating sequence as we only look at consecutive alternating elements
+        window_idx = argmax([minimum(abs.(y_error[j:j+degree+1])) for j in 1:length(y_error)-(degree+1)])
+        x_error = x_error[window_idx:window_idx+degree+1]
+        y_error = y_error[window_idx:window_idx+degree+1]
 
         x = x_error
         y = f.(x)
-        ϵ = maximum(abs.(y_error))
+        #ϵ = maximum(abs.(y_error))
 
         verbosity > 0 && println(i, ": |error| = ", ϵ)
         verbosity > 1 && println("\terrors = ", y_error)
@@ -144,7 +164,7 @@ function remez(f, f_error, l, u, degree; max_iter=10, verbosity=0, opt_tol=1.05)
             verbosity > 0 && println("\toptimality tol (", opt_tol, ") reached!")
             break
         end
-    end
+    end    
 
     return p̂, ϵ
 end     
@@ -153,6 +173,6 @@ end
 function approx_polynomial_lin(ps, l, u; verbosity=0, opt_tol=1.01, max_iter=10)
     poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
     p_lin, ϵ = remez(poly, (p, l, u) -> poly_error(ps, p, l, u), l, u, 1, verbosity=verbosity, opt_tol=opt_tol, max_iter=max_iter)
-    α, β = p_lin
+    β, α = p_lin
     return α, β, ϵ
 end

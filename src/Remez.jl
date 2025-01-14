@@ -113,6 +113,46 @@ end
 
 
 """
+Computes extrema of ReLU(x) - p(x) for a polynomial p over the interval [l, u].
+
+args:
+    ps - coefficients [p₀, p₁, ...] of the polynomial p
+    l - concrete lower bound of the interval
+    u - concrete upper bound of the interval
+
+returns:
+    xs - sorted locations of the extrema
+    ys - values of ReLU(x) - p(x) at the extrema
+"""
+function relu_error(ps, l::N, u::N) where N<:Number
+    dps = dpoly(.-ps)
+    eval_poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+    errfun = x -> max.(0, x) - eval_poly(x)
+
+    # case 1: ReLU(x) = 0
+    # -> errfun(x) = -p(x)
+    #    only need extrema of -p(x) in [l, 0]
+    xs_zero = real_roots(dps)
+    xs_zero = [x for x in xs_zero if (l <= x) && (x <= 0)]
+
+    # case 2: ReLU(x) = x
+    # -> errfun(x) = x - p(x)
+    #    need extrema of x - p(x) in [0, u]
+    dps[1] += 1
+    xs_one = real_roots(dps)
+    xs_one = [x for x in xs_one if (0 <= x) && (x <= u)]
+
+    boundary = (l < 0) & (u > 0) ? [l, 0, u] : [l, u]
+    xs = [xs_zero; xs_one; boundary]
+    perm = sortperm(xs)
+    xs = xs[perm]
+    ys = errfun.(xs)
+
+    return xs, ys
+end 
+
+
+"""
 Remez algorithm for finding the minimax polynomial approximation to a function f over the interval [l, u].
 
 If max_iter==1, then the Chebyshev interpolation is computed.

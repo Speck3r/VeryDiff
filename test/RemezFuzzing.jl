@@ -22,6 +22,29 @@ function test_poly_approx(ps, l, u; n_test=1000)
     end
 end
 
+
+function test_relu_approx(l, u, degree; n_test=1000)
+    f = x -> max(0, x)
+    ps, ϵ = VeryDiff.approx_relu_poly(l, u, degree)
+    poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+
+    for i in 1:n_test
+        x = l + (u - l)*rand()
+
+        y_l = poly(x) - ϵ
+        y_u = poly(x) + ϵ
+
+        l_error = (poly(x) < y_l)
+        u_error = (poly(x) > y_u)
+
+        (l_error || u_error) && print("ReLU(x) = ", f(x), " but ")
+        l_error && print("y_l = ", y_l, " ")
+        u_error && print("y_u = ", y_u, " ")
+        (l_error || u_error) && print("\n")
+        (l_error || u_error) && println("\tps = ", ps)
+    end
+end
+
 function test_poly_approx_random(;n_test=100, n_test_input=100)
     for i in 1:n_test
         degree = rand(2:6)
@@ -32,5 +55,16 @@ function test_poly_approx_random(;n_test=100, n_test_input=100)
     end
 end
 
+function test_relu_approx_random(;n_test=100, n_test_input=100, scale=1.)
+    for i in 1:n_test
+        degree = rand(2:6)
+        l = scale * randn()
+        u = l + abs(scale * randn())
+        test_relu_approx(l, u, degree, n_test=n_test_input)
+    end
+end
+
 
 test_poly_approx_random(n_test=1000, n_test_input=100)
+test_relu_approx_random(n_test=1000, n_test_input=100)
+test_relu_approx_random(n_test=1000, n_test_input=100, scale=1000)

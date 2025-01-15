@@ -110,7 +110,7 @@ function (L::Poly)(Z::Zonotope, P::PropState; bounds=nothing)
             γ = zeros(row_count)
 
             # TODO is there a better way than eachrow()?
-            res = VeryDiff.approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), lower[nonlinmask], upper[nonlinmask])
+            res = VeryDiff.approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), lower[nonlinmask], upper[nonlinmask], max_iter=REMEZ_ITERS[])
             λ[nonlinmask] .= getindex.(res, 1)  # slope of the input
             β[nonlinmask] .= getindex.(res, 2)  # bias 
             γ[nonlinmask] .= getindex.(res, 3)  # new error

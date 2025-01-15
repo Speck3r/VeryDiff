@@ -1,5 +1,7 @@
 module VeryDiff
 
+using Printf
+
 #using MaskedArrays
 using LinearAlgebra
 #using SparseArrays
@@ -23,7 +25,10 @@ const USE_REWRITE_DIFF = Ref{Bool}(false)
 const TIGHTEN_BOUNDS_DIFF = Ref{Bool}(false)
 
 """if imaginary part is smaller than IMAG_TOL, we count it as a real number"""
-const IMAG_TOL = Ref{Float64}(1e-12)
+const IMAG_TOL = Ref{Float64}(1e-10)
+
+"""number of Remez algorithm iterations for polynomial approximation"""
+const REMEZ_ITERS = Ref{Int}(1)
 
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()

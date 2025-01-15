@@ -501,8 +501,8 @@ function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, 
                 else
                     # p(x) - ReLU(y) = p(x) - y -> just subtract the individual zonotopes
                     Ĝ[selector, 1:input_dim] .= (@view Z₁_new.G[selector,1:input_dim]) .- (@view Z₂_new.G[selector,1:input_dim])
-                    Ĝ[selector, input_dim+1:input_dim+1+num_approx₁] .= (@view Z₁_new.G[selector,input_dim+1:end])
-                    Ĝ[selector, input_dim+1+num_approx₁:input_dim+1+num_approx₁+num_approx₂] .-= (@view Z₂_new.G[selector,input_dim+1:end])
+                    Ĝ[selector, input_dim+1:input_dim+num_approx₁] .= (@view Z₁_new.G[selector,input_dim+1:end])
+                    Ĝ[selector, input_dim+num_approx₁+1:input_dim+num_approx₁+num_approx₂] .-= (@view Z₂_new.G[selector,input_dim+1:end])
                     ĉ[selector] .= (@view Z₁_new.c[selector]) .- (@view Z₂_new.c[selector])
                 end
             end
@@ -518,6 +518,11 @@ function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, 
                 b = getindex.(res, 2)  # slope of Δ 
                 c = getindex.(res, 3)  # bias 
                 ϵ = getindex.(res, 4)  # new error term
+
+                #@show a 
+                #@show b
+                #@show c
+                #@show ϵ
 
                 # a*ex + b*eΔ
                 Ĝ[selector, 1:input_dim] .= a .* (@view Z.Z₁.G[selector, 1:input_dim]) .+ b .* (@view Z.∂Z.G[selector, 1:input_dim])

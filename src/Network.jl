@@ -135,6 +135,28 @@ function load_polynomial_nn(model_file, poly_dir)
 end
 
 
+"""
+Computes all intermediate preactivation and activation values for input x in the network.
+
+args:
+    net - network to execute 
+    x - input vector 
+
+returns:
+    xs - vector of length length(net.layers) with outputs of each layer
+"""
+function intermediate_activations(net::Network, x::AbstractVector)
+    accfun = (L, xs) -> begin
+        x = L(xs[end])
+        push!(xs, x)
+    end
+
+    xs = foldl((xs, L) -> accfun(L, xs),net.layers,init=[x])
+    # we already know the input values, so throw them away
+    return xs[2:end]
+end
+
+
 function parse_network(n::Network)
     return n
 end

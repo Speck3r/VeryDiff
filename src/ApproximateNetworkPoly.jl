@@ -25,11 +25,11 @@ function approximate_polynomial(L::VNNLib.ReLU, bounds, degree)
     lower = @view bounds[:,1]
     upper = @view bounds[:,2]
 
-    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=1)
+    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=5)
     ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
     ϵs = getindex.(res, 2)  # don't really need them, just for debugging 
 
-    @show maximum(ϵs)
+    #@show maximum(ϵs)
 
     layer = Poly(Matrix(ps))
     return layer
@@ -45,7 +45,7 @@ end
 function approximate_polynomial(net::Network, bounds::AbstractVector, degree)
     # attention: bounds are bounds AFTER the layer
     # for ReLU layers, we need the bound after the linear layer before that, the linear layers don't need any bounds
-    bounds = [[]; bounds[1:end-1]]
+    bounds = [[[]]; bounds[1:end-1]]
     layers = map(x -> approximate_polynomial(x[1], x[2], degree), zip(net.layers, bounds))
     return Network(layers)
 end

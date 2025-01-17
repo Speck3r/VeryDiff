@@ -23,3 +23,13 @@ function zono_get_max_vector(Z::Zonotope, d)
     weights = Z.G[d,:]
     return -1.0*(weights .< 0.0) + 1.0*(weights .>= 0.0)
 end
+
+
+"""
+Returns a random point contained in the zonotope.
+"""
+function random_point(z::Zonotope)
+    n_generators = size(z.G, 2)
+    ϵ = 2 .* rand(n_generators) .- 1
+    x = z.G * ϵ .+ z.c
+end

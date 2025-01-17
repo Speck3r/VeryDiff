@@ -333,6 +333,12 @@ Remez algorithm for finding the minimax polynomial approximation to a function f
 
 If max_iter==1, then the Chebyshev interpolation is computed.
 
+Information:
+    We start from the Chebyshev interpolation points.
+    Then we compute the a function p(x) via barycentric interpolation (this function is guaranteed to be the 
+    polynomial interpolating f at the given set of points xᵢ).
+    Since p(x) is a polynomial, we can use Chebyshev interpolation (for the same degree) to get its Chebyshev coefficients.
+
 args:
     f - function to approximate (continuous, Haar-condition)
     f_error - function f_error(ps, l, u) -> (x_error, y_error) returning extrema of f(x) - p(x), where 

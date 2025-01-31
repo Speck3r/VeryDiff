@@ -3,10 +3,6 @@
 #   Pachon, Trefethen: Barycentric-Remez algorithms for best polynomial approximation in the chebfun system (2009)
 
 
-
-
-
-
 """
 Chebyshev nodes in **closed** interval [l, u] of order n
 
@@ -352,8 +348,9 @@ kwargs:
     max_iter - maximum number of iterations
     verbosity
     tol - stop iterations, if (ϵ_max - h) / fnorm <= tol
+    cheby - whether to use chebyshev or monomial form of polynomials (default: true)
 """
-function remez(f, f_error, f_norm, l, u, degree; verbosity=0, max_iter=10, tol=1e-10, plotting=false)
+function remez(f, f_error, f_norm, l, u, degree; verbosity=0, max_iter=10, tol=1e-10, plotting=false, cheby=true)
     @assert l <= u "Approximation domain must be non-degenerate! Got [$l, $u]"
 
     # alternating signs
@@ -388,8 +385,12 @@ function remez(f, f_error, f_norm, l, u, degree; verbosity=0, max_iter=10, tol=1
         p_cur = (f_cur .- h .* sigma)
 
         # cheby polynomial for barycentric_interpolation points
-        p = chebyshev_approximation_vecfun(x -> barycentric_interpolation(x, p_cur, x_cur, w), l, u, degree)
-
+        if cheby
+            p = chebyshev_coefficients_vec(x -> barycentric_interpolation(x, p_cur, x_cur, w), l, u, degree)
+        else
+            p = chebyshev_approximation_vecfun(x -> barycentric_interpolation(x, p_cur, x_cur, w), l, u, degree)
+        end
+        
         x_next, ϵ_max = update_points(x_cur, h, p, f_error, l, u)
         if ϵ_max / fnorm > 1e5
             x_next, ϵ_max = update_points(x_cur, h, p, f_error, l, u, method=:one_point_exchange)
@@ -400,7 +401,12 @@ function remez(f, f_error, f_norm, l, u, degree; verbosity=0, max_iter=10, tol=1
             xs = range(l, u, 100)
             plt = plot(xs, f.(xs), label="f(x)")
             scatter!(x_cur, f_cur, label="x_$i")
-            plot!(xs, (x -> sum(p[k]*x^(k-1) for k in 1:length(p))).(xs), label="p(x)")
+
+            if cheby 
+                plot!(xs, (x -> clenshaw_chebyshev(p, x, l, u)).(xs), label="p(x)")
+            else
+                plot!(xs, (x -> sum(p[k]*x^(k-1) for k in 1:length(p))).(xs), label="p(x)")
+            end
             scatter!(x_next, f.(x_next), label="x_$(i+1)")
             display(plt)
         end

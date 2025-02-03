@@ -153,13 +153,22 @@ end
 
 function colleague_matrix(cs::AbstractVector)
     n = length(cs)
-    dl = 0.5 .* ones(n-2)
-    d  = zeros(n-1)
-    du = [1.; 0.5 .* ones(n-3)]
-    T = Tridiagonal(dl, d, du)    
+    @assert abs(cs[n]) >= 1e-12 "Colleague matrix is only possible for full degree Chebyshev polynomials, but last coeff is almost zero: $(cs[end])"
+    # need case distinction because construct off-diagonals with ones(n-2) and ones(n-3) which would be negative otherwise.
+    if n == 2
+        T̂ = Matrix([0.;;])
+    elseif n == 3
+        T̂ = Matrix([0. 1; 0.5 0])
+    else
+        dl = 0.5 .* ones(n-2)
+        d  = zeros(n-1)
+        du = [1.; 0.5 .* ones(n-3)]
+        T = Tridiagonal(dl, d, du)    
 
-    # can we avoid that?
-    T̂ = Matrix(T)
+        # can we avoid that?
+        T̂ = Matrix(T)
+    end 
+
     T̂[end,:] .-= 1/(2*cs[end]) .* cs[1:end-1]
     T̂
 end

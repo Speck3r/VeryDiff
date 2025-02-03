@@ -239,6 +239,10 @@ function relu_error_cheby(cs::AbstractVector, l=-1, u=1)
     eval_poly = make_eval_chebyshev(cs, l, u)
     errfun = x -> max.(0, x) - eval_poly(x)
 
+    # need Chebyshev coefficients of f(x) = x over [l,u]
+    cx = chebyshev_coefficients(x -> x, l, u, 1)
+    dx = chebyshev_derivative(cx)
+
     # errfun(x) = ReLU(x) - p(x), so want derivative of negative of poly
     cp = chebyshev_derivative(.-cs)
 
@@ -250,8 +254,7 @@ function relu_error_cheby(cs::AbstractVector, l=-1, u=1)
 
     # case 2: ReLU(x) = x
     # -> errfun(x) = x - p(x)
-    # d/dx x = 1 = T₀(x), so only need to add 1 to the 0-th Chebyshev coefficient
-    cp[1] += 1
+    cp[1] += dx[1]
     xs_one = chebyshev_roots(cp, l, u)
     xs_one = [x for x in xs_one if (0 <= x) && (x <= u)]
 

@@ -179,12 +179,17 @@ args:
     l - lower bound on approximation domain of p(x) (default -1)
     u - upper bound on approximation domain of p(x) (default 1)
 """
-function chebyshev_roots(cs::AbstractVector, l=-1, u=1)
-    Cm = colleague_matrix(cs)
-    vals = eigvals(Cm)
+function chebyshev_roots(cs::AbstractVector{N}, l=-1, u=1) where N<:Number
+    if length(cs) <= 1
+        # a constant polynomial has either zero or infinitely many roots.
+        return Vector{N}()
+    else
+        Cm = colleague_matrix(cs)
+        vals = eigvals(Cm)
 
-    rs = real.(vals[abs.(imag.(vals)) .< VeryDiff.IMAG_TOL[]])
-    rs * 0.5*(u - l) .+ 0.5*(u + l)
+        rs = real.(vals[abs.(imag.(vals)) .< IMAG_TOL[]])
+        return rs * 0.5*(u - l) .+ 0.5*(u + l)
+    end
 end
 
 

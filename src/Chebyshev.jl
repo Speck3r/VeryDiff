@@ -151,6 +151,13 @@ function make_eval_chebyshev(f, l::N, u::N, degree::Integer; kind=2) where N<:Nu
 end
 
 
+function normalize_chebyshev(cs::AbstractVector, l::N, u::N) where N<:Number
+    degree = length(cs) - 1
+    fc = x -> clenshaw_chebyshev(cs, x, l, u)
+    coeffs_normalized = chebyshev_coefficients.(fc, -1, 1, degree)    
+end
+
+
 function colleague_matrix(cs::AbstractVector)
     n = length(cs)
     @assert abs(cs[n]) >= 1e-12 "Colleague matrix is only possible for full degree Chebyshev polynomials, but last coeff is almost zero: $(cs[end])"

@@ -14,15 +14,16 @@ function chebyshev_nodes(l, u, n)
 end
 
 
-function chebyshev_approximation(f, l, u, n)
-    x = chebyshev_nodes(l, u, n+2)
+function chebyshev_approximation(f, l, u, n; kind=2)
+    x = chebyshev_points(n, l, u, kind=kind)
     y = f.(x)
     
     B = x.^collect(0:n)'
-    B̂ = [B (-1).^collect(1:n+2)]    
-    b = B̂ \ y
-    b = b[1:end-1]
-    ϵ = b[end]
+    b = B \ y
+    #B̂ = [B (-1).^collect(1:n+2)]    
+    #b = B̂ \ y
+    #b = b[1:end-1]
+    #ϵ = b[end]
 
     return b
 end

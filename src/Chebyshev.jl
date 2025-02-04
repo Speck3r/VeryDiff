@@ -156,7 +156,8 @@ end
 function normalize_chebyshev(cs::AbstractVector, l::N, u::N) where N<:Number
     degree = length(cs) - 1
     fc = x -> clenshaw_chebyshev(cs, x, l, u)
-    coeffs_normalized = chebyshev_coefficients.(fc, -1, 1, degree)    
+    coeffs_normalized = chebyshev_coefficients.(fc, -1, 1, degree)  
+    return coeffs_normalized
 end
 
 

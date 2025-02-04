@@ -92,6 +92,53 @@ function (L::ReLU)(Z :: Zonotope, P :: PropState; bounds = nothing)
 end
 
 
+function get_linear_relaxation(L::ChebyshevPoly, lower, upper)
+    row_count = length(lower)
+    nonlinmask = .~islinear.(eachrow(L.coeffs))
+    l̂ = copy(L.l)
+    û = copy(L.u)
+    l̂[nonlinmask] .= lower[nonlinmask]
+    û[nonlinmask] .= upper[nonlinmask]
+    λ = copy(L.coeffs[:,2])
+    β = copy(L.coeffs[:,1])
+    γ = zeros(row_count)
+
+    res = VeryDiff.approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), l̂[nonlinmask], û[nonlinmask], L.l[nonlinmask], L.u[nonlinmask], max_iter=REMEZ_ITERS[], cheby=true)
+    λ[nonlinmask] .= getindex.(res, 1)  # slope of the input
+    β[nonlinmask] .= getindex.(res, 2)  # bias 
+    γ[nonlinmask] .= getindex.(res, 3)  # new error
+
+    # now need to transform from Chebyshev coefficients to α*x + β
+    # so evaluate at x₀ = 0 and x₁ = 1 to get these coeffs as 
+    # α = (y₁ - y₀)/(x₁ - x₀)
+    # β = y₀  (since it was at 0)
+    y₀ = clenshaw_chebyshev.(eachrow([β λ]), 0., l̂, û)
+    y₁ = clenshaw_chebyshev.(eachrow([β λ]), 1., l̂, û)
+
+    α = (y₁ .- y₀)
+    β = y₀
+
+    return α, β, γ
+end
+
+
+function get_linear_relaxation(L::MonomialPoly, lower, upper)
+    row_count = length(lower)
+    nonlinmask = .~islinear.(eachrow(L.coeffs))
+    λ = copy(L.coeffs[:,2])
+    β = copy(L.coeffs[:,1])
+    γ = zeros(row_count)
+
+    # TODO is there a better way than eachrow()?
+    res = VeryDiff.approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), lower[nonlinmask], upper[nonlinmask], max_iter=REMEZ_ITERS[], cheby=false)
+    λ[nonlinmask] .= getindex.(res, 1)  # slope of the input
+    β[nonlinmask] .= getindex.(res, 2)  # bias 
+    γ[nonlinmask] .= getindex.(res, 3)  # new error
+    
+    return λ, β, γ
+end
+
+
 function (L::Poly)(Z::Zonotope, P::PropState; bounds=nothing)
     return @timeit to "Zonotope_PolyProp" begin
         @timeit to "Bounds" begin
@@ -104,17 +151,7 @@ function (L::Poly)(Z::Zonotope, P::PropState; bounds=nothing)
         end
 
         @timeit to "Vectors" begin
-            nonlinmask = .~islinear.(eachrow(L.coeffs))
-            λ = copy(L.coeffs[:,2])
-            β = copy(L.coeffs[:,1])
-            γ = zeros(row_count)
-
-            # TODO is there a better way than eachrow()?
-            res = VeryDiff.approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), lower[nonlinmask], upper[nonlinmask], max_iter=REMEZ_ITERS[])
-            λ[nonlinmask] .= getindex.(res, 1)  # slope of the input
-            β[nonlinmask] .= getindex.(res, 2)  # bias 
-            γ[nonlinmask] .= getindex.(res, 3)  # new error
-
+            λ, β, γ = get_linear_relaxation(L, lower, upper)
             ĉ = λ .* Z.c .+ β
         end
 

@@ -512,27 +512,49 @@ kwargs:
 #end     
 
 
-function approx_polynomial_lin(ps, l, u; verbosity=0, tol=1e-10, max_iter=10)
-    poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
-    p_lin, ϵ = remez(poly, (p, l, u) -> poly_error(ps, p, l, u), poly_norm, l, u, 1, verbosity=verbosity, tol=tol, max_iter=max_iter)
+function approx_polynomial_lin(ps, l, u; verbosity=0, tol=1e-10, max_iter=10, cheby=true)
+    if cheby 
+        # ASSUMPTION: ps is stored as normalized to x ∈ [-1, 1]
+        poly = x -> clenshaw_chebyshev(ps, x)
+        degree = length(ps) - 1
+        # need to normalize polynomial to x ∈ [l, u]
+        ps = chebyshev_coefficients(poly, l, u, degree)
+
+        errfun = (p, l, u) -> poly_error_cheby(ps, p, l, u)
+    else  
+        poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+        errfun = (p, l, u) -> poly_error(ps, p, l, u)
+    end 
+
+    p_lin, ϵ = remez(poly, errfun, poly_norm, l, u, 1, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=cheby)
     β, α = p_lin
     return α, β, ϵ
 end
 
 
-function approx_relu_poly(l, u, degree; verbosity=0, tol=1e-10, max_iter=10)
+function approx_relu_poly(l, u, degree; verbosity=0, tol=1e-10, max_iter=10, cheby=true)
+    # println("l = $l, u = $u")
     f = x -> max.(0, x)
 
     if u <= 0
+        # we can just set everything to zero in both the chebyshev and the monomial case
         p = zeros(degree+1)
         ϵ = 0.
     elseif l >= 0
+        @assert degree > 0 "ReLU approximation currently not implemented for degree = 0 for fixed active case!"
+        # since T₁(x) = x, monomial and chebyshev case is the same
         p = zeros(degree+1)
-        p[1] = 1.
+        p[2] = 1.
         ϵ = 0.
     else
-        p, ϵ = remez(f, relu_error, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter)
+        if cheby
+            p, ϵ = remez(f, relu_error_cheby, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=true)
+            #abs(p[1]) > 100 && println("l = $l, u = $u, degree = $degree")
+        else
+            p, ϵ = remez(f, relu_error, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=false)
+        end
     end
 
+    # TODO: Option to normalize Chebyshev to [-1, 1]?
     return p, ϵ
 end

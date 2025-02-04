@@ -3,18 +3,51 @@
 isactivation(L::ReLU) = true
 isactivation(L::Dense) = false
 
+abstract type Poly{N<:Number} <: VNNLib.Layer end
+
 # since polynomial networks are not defined in VNNLib.jl, we define their behaviour for concrete inputs here 
 
-struct Poly{N} <: VNNLib.Layer where {N<:Number}
+struct MonomialPoly{N<:Number} <: Poly{N}
     coeffs::Array{N}
 end
 
 
-function (L::Poly)(x::Vector{N}) where {N<:Number}
+function (L::MonomialPoly)(x::Vector{N}) where {N<:Number}
     # TODO: this forces all polynomials in a layer to have the same degree (or zero coeffs) (do we want that?)
     n_neurons, n_coeffs = size(L.coeffs)
     degree = n_coeffs - 1
     vec(sum(L.coeffs .* x .^ collect(0:degree)', dims=2))
+end
+
+
+"""
+Polynomial activation layer with coefficients of polynomial stored w.r.t. Chebyshev basis.
+
+The domain of the Chebyshev polynomials is NOT scaled! (i.e. coefficients are stored w.r.t x ∈ [-1, 1],
+however they can also be **evaluated** for x ∉ [-1, 1])
+
+attrs:
+    coeffs - array of coefficients, s.t. pᵢ(x) = c₀T₀(x) + c₁T₁(x) + ...
+"""
+struct ChebyshevPoly{N<:Number} <: Poly{N} 
+    coeffs::Array{N}
+end
+
+function ChebyshevPoly(coeffs::Array{N}, l::AbstractVector{N}, u::AbstractVector{N}) where N<:Number
+    m, n = size(coeffs)
+    degree = n - 1
+
+    ps = normalize_chebyshev.(eachrow(coeffs), l, u)
+    # ps = [x -> clenshaw_chebyshev(coeffs[i,:], x, l[i], u[i]) for i in 1:m]
+    # Since they are already polynomials of the given degree, re-fitting Chebyshev interpolation 
+    # for [-1, 1] will result in the exact same polynomial, but with normalized coefficients.
+    # coeffs_normalized = chebyshev_coefficients.(ps, -1, 1, degree)
+    ChebyshevPoly(Matrix(hcat(ps...)'))
+end
+
+
+function (L::ChebyshevPoly)(x::Vector{N}) where {N<:Number}
+    clenshaw_chebyshev.(eachrow(L.coeffs), x)
 end
 
 

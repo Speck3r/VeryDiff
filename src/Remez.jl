@@ -565,9 +565,15 @@ function approx_relu_poly(l, u, degree; verbosity=0, tol=1e-10, max_iter=10, che
         ϵ = 0.
     elseif l >= 0
         @assert degree > 0 "ReLU approximation currently not implemented for degree = 0 for fixed active case!"
-        # since T₁(x) = x, monomial and chebyshev case is the same
-        p = zeros(degree+1)
-        p[2] = 1.
+
+        if cheby 
+            # although T₁(x) = x, we cannot just set p[2] = 1 in the Chebyshev case because it is evaluated 
+            # w.r.t x ∈ [l, u], i.e. that would be T₁((x - 0.5(l + u))/(0.5 * (u - l))) ≠ x
+            p = chebyshev_coefficients(f, l, u, degree)
+        else        
+            p = zeros(degree+1)
+            p[2] = 1.
+        end
         ϵ = 0.
     else
         if cheby
@@ -578,6 +584,5 @@ function approx_relu_poly(l, u, degree; verbosity=0, tol=1e-10, max_iter=10, che
         end
     end
 
-    # TODO: Option to normalize Chebyshev to [-1, 1]?
     return p, ϵ
 end

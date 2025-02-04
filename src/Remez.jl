@@ -512,10 +512,33 @@ kwargs:
 #end     
 
 
-function approx_polynomial_lin(ps, l, u; verbosity=0, tol=1e-10, max_iter=10, cheby=true)
+"""
+Finds best linear approximation to polynomial given by coefficients ps via the Remez algorithm.
+
+The original polynomial might also approximate some function over the interval [l̂, û].
+And (in case of the Chebyshev approximation) the coefficients might depend on that range. 
+So these can also be specified. 
+
+args:
+    ps - coefficients of the polynomial to approximate (either monomial or Chebyshev coefficients for increasing degree)
+    l  - lower bound for domain of linear approximation 
+    u  - upper bound for domain of linear approximation 
+
+default args: (they can be ignored if dealing with polynomials in monomial basis)
+    l̂ - lower bound for approximation domain of the original polynomial p(x) (default -1)
+    û - upper bound for approximation domain of the original polynomial p(x) (default  1)
+
+kwargs:
+    verbosity 
+    tol 
+    max_iter 
+    cheby
+"""
+function approx_polynomial_lin(ps, l, u, l̂=-1., û=1.; verbosity=0, tol=1e-10, max_iter=10, cheby=true)
     if cheby 
+        # need to get polynomials to common domain, s.t. we can just add and subtract the coefficient vectors.
         # ASSUMPTION: ps is stored as normalized to x ∈ [-1, 1]
-        poly = x -> clenshaw_chebyshev(ps, x)
+        poly = x -> clenshaw_chebyshev(ps, x, l̂, û)
         degree = length(ps) - 1
         # need to normalize polynomial to x ∈ [l, u]
         ps = chebyshev_coefficients(poly, l, u, degree)

@@ -29,25 +29,24 @@ however they can also be **evaluated** for x ∉ [-1, 1])
 attrs:
     coeffs - array of coefficients, s.t. pᵢ(x) = c₀T₀(x) + c₁T₁(x) + ...
 """
-struct ChebyshevPoly{N<:Number} <: Poly{N} 
+struct ChebyshevPoly{N<:Number,VN<:AbstractVector{N}} <: Poly{N} 
     coeffs::Array{N}
+    l::VN
+    u::VN
 end
 
-function ChebyshevPoly(coeffs::Array{N}, l::AbstractVector{N}, u::AbstractVector{N}) where N<:Number
-    m, n = size(coeffs)
-    degree = n - 1
 
-    ps = normalize_chebyshev.(eachrow(coeffs), l, u)
-    # ps = [x -> clenshaw_chebyshev(coeffs[i,:], x, l[i], u[i]) for i in 1:m]
-    # Since they are already polynomials of the given degree, re-fitting Chebyshev interpolation 
-    # for [-1, 1] will result in the exact same polynomial, but with normalized coefficients.
-    # coeffs_normalized = chebyshev_coefficients.(ps, -1, 1, degree)
-    ChebyshevPoly(Matrix(hcat(ps...)'))
+function ChebyshevPoly(coeffs::Array{N}) where N<:Number
+    m, n = size(coeffs)
+    l = .-ones(N, m)
+    u = ones(N, m)
+
+    ChebyshevPoly(coeffs, l, u)
 end
 
 
 function (L::ChebyshevPoly)(x::Vector{N}) where {N<:Number}
-    clenshaw_chebyshev.(eachrow(L.coeffs), x)
+    clenshaw_chebyshev.(eachrow(L.coeffs), x, L.l, L.u)
 end
 
 

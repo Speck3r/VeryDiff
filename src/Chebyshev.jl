@@ -3,12 +3,14 @@
 
 function chebyshev_points(degree::Integer, l=-1, u=1; kind=2)
     if kind == 1
-        return [cos(π*(k + 0.5)/N) for k = 0:degree]
+        xs = [cos(π*(k + 0.5)/degree) for k = 0:degree]
     elseif kind == 2
-        return [cos(k*π / degree) for k = 0:degree]
+        xs = [cos(k*π / degree) for k = 0:degree]
     else 
         throw(ArgumentError("There are no Chebyshev points of the $kind kind! Only 1 or 2."))
     end
+
+    return 0.5*(u-l) .* xs .+ 0.5*(u+l)
 end
 
 """

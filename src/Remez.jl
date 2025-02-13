@@ -171,29 +171,56 @@ function relu_error(ps, l::N, u::N) where N<:Number
 end 
 
 
-function barycentric_weights(xs)
+function baryweights_chebfun(xs::AbstractVector{N}) where N<:Number
+    n = length(xs)
+    C = 4/(maximum(xs) - minimum(xs))
+    w = ones(N, n)
+    for j = 1:n 
+        v = C*(xs[j] .- xs)
+        v[j] = 1.
+        vv = exp(sum(log.(abs.(v))))
+        w[j] = 1/(prod(sign.(v))*vv)
+    end 
+
+    return w ./ maximum(abs.(w))
+end
+
+
+function barycentric_weights(xs::AbstractVector{N}) where N<:Number
+    # Code taken from https://tobydriscoll.net/fnc-julia/globalapprox/barycentric.html
     l = minimum(xs)
     u = maximum(xs)
 
     n = length(xs)
 
-    C = 4/(u - l)
+    #C = 4/(u - l)
+    C = (u - l)/4
 
-    ws = ones(n)
-    for j in 1:n 
-        sign_prod = 1
-        log_sum = 0.
-        for v in 1:n 
-            if v != j
-                sign_prod *= sign(xs[j] - xs[v])
-                log_sum += log(abs(xs[j] - xs[v]))
-            end
-        end
-        
-        ws[j] = sign_prod / exp(n * log(1/C) + log_sum)
+    xc = xs ./ C
+    # Adding one node at a time, compute inverses of the weights.
+    ω = ones(N, n)
+    for m in 0:n-2
+        d = xc[1:m+1] .- xc[m+2]    # vector of node differences
+        @. ω[1:m+1] *= d            # update previous
+        ω[m+2] = prod(-d)         # compute the new one
     end
+    ws = 1 ./ ω 
 
-    ws = ws / maximum(abs.(ws))
+    #ws = ones(n)
+    #for j in 1:n 
+    #    sign_prod = 1
+    #    log_sum = 0.
+    #    for v in 1:n 
+    #        if v != j
+    #            sign_prod *= sign(xs[j] - xs[v])
+    #            log_sum += log(abs(xs[j] - xs[v]))
+    #        end
+    #    end
+    #    
+    #    ws[j] = sign_prod / exp(n * log(1/C) + log_sum)
+    #end
+    #
+    #ws = ws / maximum(abs.(ws))
     return ws
 end
 

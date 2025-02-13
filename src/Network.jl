@@ -53,6 +53,19 @@ end
 isactivation(L::Poly) = true
 
 
+struct DiffLayer{L1<:VNNLib.Layer,L2<:VNNLib.Layer} <: VNNLib.Layer
+    layer1::L1
+    layer2::L2
+end
+
+
+function (L::DiffLayer)(x::Vector{N}) where N<:Number
+    y₁ = L.layer1(x)
+    y₂ = L.layer2(x)
+    y₁ .- y₂
+end
+
+
 struct PolyReLU{N} <: VNNLib.Layer where {N<:Number}
     coeffs::Array{N}
 end
@@ -153,7 +166,7 @@ function load_polynomial_nn(model_file, poly_dir)
     cnt = 1
     for L in nn.layers
         if typeof(L) == VNNLib.ReLU
-            player = Poly(coeffs[cnt])
+            player = MonomialPoly(coeffs[cnt])
             cnt += 1
 
             push!(layers_new, player)

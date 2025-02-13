@@ -241,7 +241,9 @@ function chebyshev_derivative(cs::AbstractVector)
     end
     cp[1] = cs[2] + 0.5 * cp[3]
 
-    cp[1:end-2]
+    # need to take variable normalization into account
+    # d/dx p(ax + b) = p'(ax + b) * a 
+    2/(u - l) * cp[1:end-2]
 end
 
 

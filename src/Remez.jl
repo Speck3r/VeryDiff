@@ -225,15 +225,15 @@ function barycentric_weights(xs::AbstractVector{N}) where N<:Number
 end
 
 
-function barycentric_interpolation(x, fval, xval, w)
+function barycentric_interpolation(x::AbstractVector{N}, fval::AbstractVector{N}, xval::AbstractVector{N}, w::AbstractVector{N}) where N<:Number
     if length(fval) == 1
         # f is constant function
         return fill(fval, length(x))
     elseif any(isnan.(fval))
-        return fill(NaN, length(x))
+        return fill(N(NaN), length(x))
     end
 
-    f = zeros(length(x))
+    f = zeros(N, length(x))
     for j in 1:length(x)
         ŵ = w ./ (x[j] .- xval)
         f[j] = (ŵ' * fval) / sum(ŵ)
@@ -267,7 +267,7 @@ returns:
     x_next - sorted vector of next candidate points 
     max_err - maximum absolute error between the true function and the candidate polynomial p
 """
-function update_points(xk::AbstractVector, h::N, p::AbstractVector, f_error, l::N, u::N; method=:full_exchange) where N<:Number
+function update_points(xk::AbstractVector{N}, h::N, p::AbstractVector{N}, f_error, l::N, u::N; method=:full_exchange) where N<:Number
     n = length(xk)
     x_error, y_error = f_error(p, l, u)
     abs_err = abs.(y_error)
@@ -286,8 +286,8 @@ function update_points(xk::AbstractVector, h::N, p::AbstractVector, f_error, l::
     perm = sortperm(xr)
     xr = xr[perm]
 
-    sigma = ones(length(xk))
-    sigma[2:2:end] .= -1
+    sigma = ones(N, length(xk))
+    sigma[2:2:end] .= -one(N)
 
     err = [y_error; sigma .* h]
     err = err[perm]
@@ -313,14 +313,15 @@ function update_points(xk::AbstractVector, h::N, p::AbstractVector, f_error, l::
         end
     end
 
+    # TODO: this doesn't seem optimal, wouldn't we want to take the n largest errors of alternating sign?
     # choose degree+2 (==n) consecutive points that include the maximum error 
     idx = argmax(abs.(err_next))
     max_err = abs(err_next[idx])
     if n <= length(x_next)
         # if we can choose points (i.e. there are more than necessary)
         # take the points at most n to the left of the max
-        d = max(idx - n, 1)
-        x_next = x_next[d:d+n-1]
+        d = max(idx - (n-1), 1)
+        x_next = x_next[d:d+(n-1)]
     end 
 
     return x_next, max_err
@@ -375,20 +376,21 @@ kwargs:
     tol - stop iterations, if (ϵ_max - h) / fnorm <= tol
     cheby - whether to use chebyshev or monomial form of polynomials (default: true)
 """
-function remez(f, f_error, f_norm, l, u, degree; verbosity=0, max_iter=10, tol=1e-10, plotting=false, cheby=true)
+function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max_iter=10, tol=N(1e-10), plotting=false, cheby=true) where N<:Number
     @assert l <= u "Approximation domain must be non-degenerate! Got [$l, $u]"
 
     # alternating signs
-    sigma = ones(degree+2)
-    sigma[2:2:end] .= -1
+    sigma = ones(N, degree+2)
+    sigma[2:2:end] .= -one(N)
 
-    δ_best = Inf
-    p_best = zeros(degree+1)
-    ϵ_best = Inf 
-    x_best = zeros(degree+2)
+    δ_best = N(Inf)
+    p_best = zeros(N, degree+1)
+    ϵ_best = N(Inf)
+    x_best = zeros(N, degree+2)
 
     # get initial set of points
-    x_cur = VeryDiff.chebyshev_nodes(l, u, degree+2)
+    #x_cur = VeryDiff.chebyshev_nodes(l, u, degree+2)
+    x_cur = VeryDiff.chebyshev_points(degree+1, l, u)
 
     fnorm = f_norm(l, u, 2)
 
@@ -396,14 +398,15 @@ function remez(f, f_error, f_norm, l, u, degree; verbosity=0, max_iter=10, tol=1
 
     for i in 1:max_iter       
         f_cur = f.(x_cur)
-        w  = barycentric_weights(x_cur)
+        #w  = barycentric_weights(x_cur)
+        w = baryweights_chebfun(x_cur)
 
         # levelled error 
         # i.e. error of equal magnitude and alternating sign at each x_cur
         h = (w' * f_cur) / (w' * sigma) 
 
         if h == 0
-            h = 1e-19
+            h = N(1e-19)
         end
 
         # function values at x_cur for barycentric_interpolation
@@ -425,14 +428,17 @@ function remez(f, f_error, f_norm, l, u, degree; verbosity=0, max_iter=10, tol=1
         if plotting
             xs = range(l, u, 100)
             plt = plot(xs, f.(xs), label="f(x)")
-            scatter!(x_cur, f_cur, label="x_$i")
+            #scatter!(x_cur, f_cur, label="x_$i")
 
             if cheby 
                 plot!(xs, (x -> clenshaw_chebyshev(p, x, l, u)).(xs), label="p(x)")
             else
                 plot!(xs, (x -> sum(p[k]*x^(k-1) for k in 1:length(p))).(xs), label="p(x)")
             end
-            scatter!(x_next, f.(x_next), label="x_$(i+1)")
+
+            barys = barycentric_interpolation(xs, p_cur, x_cur, w)
+            plot!(xs, barys, label="bary(x)")
+            #scatter!(x_next, f.(x_next), label="x_$(i+1)")
             display(plt)
         end
 
@@ -558,11 +564,18 @@ kwargs:
     max_iter 
     cheby
 """
-function approx_polynomial_lin(ps, l, u, l̂=-1., û=1.; verbosity=0, tol=1e-10, max_iter=10, cheby=true)
+function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), û=one(N); verbosity=0, tol=N(1e-10), max_iter=10, cheby=true) where N<:Number
     if cheby 
         # need to get polynomials to common domain, s.t. we can just add and subtract the coefficient vectors.
-        # ASSUMPTION: ps is stored as normalized to x ∈ [-1, 1]
         poly = x -> clenshaw_chebyshev(ps, x, l̂, û)
+
+        if l == u 
+            # how can that happen?
+            # TODO: better solution than just an if?
+            y = poly(l)
+            return zero(N), y, zero(N)
+        end
+
         degree = length(ps) - 1
         # need to normalize polynomial to x ∈ [l, u]
         ps = chebyshev_coefficients(poly, l, u, degree)
@@ -570,6 +583,14 @@ function approx_polynomial_lin(ps, l, u, l̂=-1., û=1.; verbosity=0, tol=1e-10
         errfun = (p, l, u) -> poly_error_cheby(ps, p, l, u)
     else  
         poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+
+        if l == u 
+            # how can that happen?
+            # TODO: better solution than just an if?
+            y = poly(l)
+            return zero(N), y, zero(N)
+        end
+
         errfun = (p, l, u) -> poly_error(ps, p, l, u)
     end 
 
@@ -579,14 +600,13 @@ function approx_polynomial_lin(ps, l, u, l̂=-1., û=1.; verbosity=0, tol=1e-10
 end
 
 
-function approx_relu_poly(l, u, degree; verbosity=0, tol=1e-10, max_iter=10, cheby=true)
-    # println("l = $l, u = $u")
+function approx_relu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10), max_iter=10, plotting=false, cheby=true) where N<:Number
     f = x -> max.(0, x)
 
     if u <= 0
         # we can just set everything to zero in both the chebyshev and the monomial case
-        p = zeros(degree+1)
-        ϵ = 0.
+        p = zeros(N, degree+1)
+        ϵ = zero(N)
     elseif l >= 0
         @assert degree > 0 "ReLU approximation currently not implemented for degree = 0 for fixed active case!"
 
@@ -595,16 +615,15 @@ function approx_relu_poly(l, u, degree; verbosity=0, tol=1e-10, max_iter=10, che
             # w.r.t x ∈ [l, u], i.e. that would be T₁((x - 0.5(l + u))/(0.5 * (u - l))) ≠ x
             p = chebyshev_coefficients(f, l, u, degree)
         else        
-            p = zeros(degree+1)
-            p[2] = 1.
+            p = zeros(N, degree+1)
+            p[2] = one(N)
         end
-        ϵ = 0.
+        ϵ = zero(N)
     else
         if cheby
-            p, ϵ = remez(f, relu_error_cheby, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=true)
-            #abs(p[1]) > 100 && println("l = $l, u = $u, degree = $degree")
+            p, ϵ = remez(f, relu_error_cheby, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=true)
         else
-            p, ϵ = remez(f, relu_error, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=false)
+            p, ϵ = remez(f, relu_error, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=false)
         end
     end
 

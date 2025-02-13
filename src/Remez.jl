@@ -20,10 +20,6 @@ function chebyshev_approximation(f, l, u, n; kind=2)
     
     B = x.^collect(0:n)'
     b = B \ y
-    #B̂ = [B (-1).^collect(1:n+2)]    
-    #b = B̂ \ y
-    #b = b[1:end-1]
-    #ϵ = b[end]
 
     return b
 end
@@ -33,6 +29,7 @@ end
 Chebyshev approximation for function that can handle vector input more efficiently than f.(x).
 """
 function chebyshev_approximation_vecfun(f, l, u, n)
+    @assert l != u "l == u!!! Can't solve singular system! l = $l, u = $u"
     x = VeryDiff.chebyshev_nodes(l, u, n+2)
     y = f(x)
     

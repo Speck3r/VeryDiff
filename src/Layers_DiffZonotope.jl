@@ -374,7 +374,13 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
 end
 
 
-function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
+function find_good_poly_diff_approx(L::MonomialPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper)
+    find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], ∂lower[selector], ∂upper[selector], eachrow(L.coeffs[selector,:]))
+end
+
+
+
+function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
     return @timeit to "DiffZonotope_PolyReLUProp" begin
         L1, LΔ, L2 = Ls
         Debugger.@pre_diffzono_prop_hook Z context="Pre PolyReLU"
@@ -390,6 +396,10 @@ function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, 
         lower₂ = @view bounds₂[:,1]
         upper₂ = @view bounds₂[:,2]
 
+        if !all(lower₁ .<= upper₁)
+            err = maximum(lower₁ .- upper₁)
+            println("lower > upper!!! err = ", err)
+        end
         @assert all(lower₁ .<= upper₁) "Zonotope bounds: lower bound for x is larger than upper bound for x"
         @assert all(lower₂ .<= upper₂) "Zonotope bounds: lower bound for y is larger than upper bound for y"
 
@@ -513,7 +523,8 @@ function propagate_diff_layer(Ls :: Tuple{Poly,PolyReLU,ReLU}, Z::DiffZonotope, 
                 Debugger.@diffrelu_case_hook unstable context="Unstable"
                 
                 # why is there no better way to handle broadcasted tuples?
-                res = find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], ∂lower[selector], ∂upper[selector], eachrow(LΔ.coeffs[selector,:]))
+                res = find_good_poly_diff_approx(LΔ.layer1, selector, lower₁, upper₁, ∂lower, ∂upper)
+                #res = find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], ∂lower[selector], ∂upper[selector], eachrow(LΔ.coeffs[selector,:]))
                 a = getindex.(res, 1)  # slope of x
                 b = getindex.(res, 2)  # slope of Δ 
                 c = getindex.(res, 3)  # bias 

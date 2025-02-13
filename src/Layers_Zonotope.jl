@@ -130,7 +130,7 @@ function get_linear_relaxation(L::MonomialPoly, lower, upper)
     γ = zeros(row_count)
 
     # TODO is there a better way than eachrow()?
-    res = VeryDiff.approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), lower[nonlinmask], upper[nonlinmask], max_iter=REMEZ_ITERS[], cheby=false)
+    res = approx_polynomial_lin.(eachrow(L.coeffs[nonlinmask, :]), lower[nonlinmask], upper[nonlinmask], max_iter=REMEZ_ITERS[], cheby=false)
     λ[nonlinmask] .= getindex.(res, 1)  # slope of the input
     β[nonlinmask] .= getindex.(res, 2)  # bias 
     γ[nonlinmask] .= getindex.(res, 3)  # new error

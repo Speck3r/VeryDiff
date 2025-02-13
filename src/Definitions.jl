@@ -75,7 +75,8 @@ struct GeminiNetwork
             elseif (typeof(l1) == ReLU) && (typeof(l2) == ReLU)
                 push!(diff_layers, ReLU())
             elseif (typeof(l1) <: Poly) && (typeof(l2) == ReLU)
-                push!(diff_layers, PolyReLU(l1.coeffs))
+                push!(diff_layers, DiffLayer(l1, ReLU()))
+                #push!(diff_layers, PolyReLU(l1.coeffs))
             else
                 error("Unsupported layer types! l1 = ", typeof(l1), ", l2 = ", typeof(l2))
             end

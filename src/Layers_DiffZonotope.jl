@@ -2,7 +2,7 @@ import VNNLib.NNLoader.Network
 import VNNLib.NNLoader.Dense
 import VNNLib.NNLoader.ReLU
 
-function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
+function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
     #println("Prop dense")
     return @timeit to "DiffZonotope_DenseProp" begin
     #println("Dense")
@@ -12,7 +12,7 @@ function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope, P
     Debugger.@diff_layer_inspection_hook Ls
 
     if USE_DIFFZONO
-        ∂G = Matrix{Float64}(undef, size(L1.W,1), size(Z.∂Z.G,2))
+        ∂G = GN(undef, size(L1.W,1), size(Z.∂Z.G,2))
         mul!(∂G, L1.W, Z.∂Z.G)
         #∂G = L1.W*Z.∂Z.G
         input_dim = size(Z.Z₂,2)-Z.num_approx₂
@@ -43,12 +43,12 @@ function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope, P
     end
 end
 
-function two_generator_bound(G::Matrix{Float64}, b, H::Matrix{Float64})
+function two_generator_bound(G::AbstractMatrix, b, H::AbstractMatrix)
     @assert size(G,1) == size(H,1) && size(G,2) == size(H,2)
     return [sum(j->abs(G[i,j]+b*H[i,j]),1:size(G,2)) for i in 1:size(G,1)]
 end
 
-function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
+function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
     #println("Prop relu")
     return @timeit to "DiffZonotope_ReLUProp" begin
     #println("ReLU")
@@ -165,10 +165,10 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         DEBUG_ANY_ANY = false
         
 
-        Ĝ = zeros(Float64,
+        Ĝ = zeros(N,
             output_dim,
             input_dim+num_approx₁+num_approx₂+∂num_approx)
-        ĉ = zeros(output_dim)
+        ĉ = zeros(N, output_dim)
         
         selector = zeros(Bool,output_dim)
 
@@ -380,7 +380,7 @@ end
 
 
 
-function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::DiffZonotope, P::PropState; bounds_x=nothing, bounds_y=nothing)
+function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
     return @timeit to "DiffZonotope_PolyReLUProp" begin
         L1, LΔ, L2 = Ls
         Debugger.@pre_diffzono_prop_hook Z context="Pre PolyReLU"
@@ -484,10 +484,10 @@ function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::
             ∂num_approx = Z.∂num_approx+count(crossing_new_generator)
             ∂num_approx_additional = ∂num_approx-Z.∂num_approx       
 
-            Ĝ = zeros(Float64,
+            Ĝ = zeros(N,
                 output_dim,
                 input_dim+num_approx₁+num_approx₂+∂num_approx)
-            ĉ = zeros(output_dim)
+            ĉ = zeros(N, output_dim)
             
             selector = zeros(Bool,output_dim)
 

@@ -1,24 +1,28 @@
-mutable struct Zonotope
-    G::Matrix{Float64}
-    c::Vector{Float64}
-    influence::Union{Matrix{Float64},Nothing}
+mutable struct Zonotope{N<:Number,GN<:AbstractMatrix{N},CN<:AbstractVector{N}}
+    G::GN
+    c::CN
+    influence::Union{GN,Nothing}
 end
 
-struct VerificationTask
-    middle :: Vector{Float64}
-    distance :: Vector{Float64}
+function Zonotope(G::GN,c::CN,influence) where {GN,CN}
+    Zonotope(G, c, GN(influence))
+end
+
+struct VerificationTask{N<:Number,GN<:AbstractMatrix{N},CN<:AbstractVector{N}}
+    middle :: Vector{N}
+    distance :: Vector{N}
     distance_indices :: Vector{Int}
-    ∂Z::Zonotope
+    ∂Z::Zonotope{N,GN,CN}
     verification_status
-    distance_bound :: Float64
+    distance_bound :: N
 end
 
 # Z₂ = Z₁ - ∂Z
 
-mutable struct DiffZonotope
-    Z₁::Zonotope
-    Z₂::Zonotope
-    ∂Z::Zonotope
+mutable struct DiffZonotope{N<:Number,GN<:AbstractMatrix{N},CN<:AbstractVector{N}}
+    Z₁::Zonotope{N,GN,CN}
+    Z₂::Zonotope{N,GN,CN}
+    ∂Z::Zonotope{N,GN,CN}
     num_approx₁ :: Int
     num_approx₂ :: Int
     ∂num_approx :: Int

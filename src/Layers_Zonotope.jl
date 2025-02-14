@@ -28,7 +28,7 @@ function get_slope(l,u, alpha)
     end
 end
 
-function (L::ReLU)(Z :: Zonotope, P :: PropState; bounds = nothing)
+function (L::ReLU)(Z :: Zonotope{N,GN,CN}, P :: PropState; bounds = nothing) where {N,GN,CN}
     return @timeit to "Zonotope_ReLUProp" begin
     @timeit to "Bounds" begin
     row_count = size(Z.G,1)
@@ -56,7 +56,7 @@ function (L::ReLU)(Z :: Zonotope, P :: PropState; bounds = nothing)
         # TODO(steuber): Can we avoid this reallocation?
         @timeit to "Allocation" begin
         #println(size(Z.influence,1), size(Z.influence,2)+count(crossing))
-        influence_new = zeros(Float64, size(Z.influence,1), size(Z.influence,2)+count(crossing))
+        influence_new = zeros(N, size(Z.influence,1), size(Z.influence,2)+count(crossing))
         end
         @timeit to "Set Matrix" begin
         influence_new[:,1:size(Z.influence,2)] .= Z.influence
@@ -74,7 +74,7 @@ function (L::ReLU)(Z :: Zonotope, P :: PropState; bounds = nothing)
     end
 
     @timeit to "Allocation" begin
-    Ĝ = zeros(Float64,row_count, size(Z.G,2)+count(crossing))
+    Ĝ = zeros(N,row_count, size(Z.G,2)+count(crossing))
     end
     #zeros(row_count, size(Z.G,2)+count(crossing))
     #Z.G .*= λ
@@ -139,7 +139,7 @@ function get_linear_relaxation(L::MonomialPoly, lower, upper)
 end
 
 
-function (L::Poly)(Z::Zonotope, P::PropState; bounds=nothing)
+function (L::Poly)(Z::Zonotope{N,GN,CN}, P::PropState; bounds=nothing) where {N,GN,CN}
     return @timeit to "Zonotope_PolyProp" begin
         @timeit to "Bounds" begin
             row_count = size(Z.G, 1)
@@ -173,7 +173,7 @@ function (L::Poly)(Z::Zonotope, P::PropState; bounds=nothing)
         end
 
         @timeit to "Allocation" begin
-            Ĝ = zeros(Float64, row_count, size(Z.G, 2) + row_count)
+            Ĝ = zeros(N, row_count, size(Z.G, 2) + row_count)
         end
         #Z.G .*= λ
         @timeit to "Set Matrix" begin

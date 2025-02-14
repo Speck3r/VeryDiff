@@ -1,5 +1,5 @@
 # direction: 1 (maximize) or -1 (minimize)
-function zono_optimize(direction::Float64, Z::Zonotope, d :: Int) :: Float64
+function zono_optimize(direction::N, Z::Zonotope, d :: Int) where N<:Number
     @assert isone(direction) || isone(-direction)
     row = view(Z.G,d,:)
     result = direction*sum(abs,row) + Z.c[d]
@@ -14,7 +14,7 @@ function zono_bounds(Z::Zonotope)
     #end
 end
 
-function zono_get_max_vector(Z::Zonotope, direction::Vector{Float64})
+function zono_get_max_vector(Z::Zonotope, direction::AbstractVector{N}) where N<:Number
     weights = direction' * Z.G
     return -1.0*(weights .< 0.0) + 1.0*(weights .>= 0.0)
 end

@@ -2,6 +2,7 @@ module VeryDiff
 
 using Printf
 
+using DoubleFloats  # for better precision in polynomial approximation
 #using MaskedArrays
 using LinearAlgebra
 #using SparseArrays

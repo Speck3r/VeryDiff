@@ -6,6 +6,7 @@ version = "0.1.0"
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+DoubleFloats = "497a8b3b-efae-58df-a0af-a86822472b78"
 GLPK = "60bf3e95-4087-53dc-ae20-288a0d20c6a6"
 Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
@@ -23,6 +24,8 @@ VNNLib = "286915b0-5841-4eea-9013-d818f395ad8c"
 
 [compat]
 CSV = "0.10.15"
+DoubleFloats = "1.4.2"
 Optim = "1.10.0"
 PolynomialRoots = "1.0.0"
 Printf = "1.11.0"
+VNNLib = "0.2.3"

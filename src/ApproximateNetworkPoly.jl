@@ -1,4 +1,15 @@
 
+"""
+For each layer in the network, compute the interval bounds after that layer was applied.
+
+args:
+    net - Network to get bounds from 
+    input_set - input set for which to get bounds 
+
+returns:
+    bounds - list of (n_neurons x 2)-array for each layer holding lower and upper bounds for each neuron 
+             after that layer was applied
+"""
 function get_zono_bounds(net::Network, input_set::Zonotope)
     bounds = []
     

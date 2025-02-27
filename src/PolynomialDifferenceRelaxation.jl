@@ -98,7 +98,7 @@ args:
 returns:
     vector of 2d critical points 
 """
-function relax_diff_inact(boundary, ps::AbstractVector{N}, a::N, b::N) where N<:Number
+function relax_diff_inact(boundary, ps, a::N, b::N) where N<:Number
     dps = dpoly(ps)
     # d/dx p(x) - ax
     dpa = copy(dps)
@@ -190,7 +190,8 @@ returns:
     ϵ  - coefficient for new error term in linear relaxation
 """
 function parallel_diff_relaxation(lx, ux, lΔ, uΔ, ps, a, b)
-    eval_poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+    #eval_poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+    eval_poly = make_eval_poly(ps)
     f = (x,Δ) -> eval_poly(x) - max.(0, x - Δ) - a*x - b*Δ
     
     ps_leq, ps_geq = get_boundary_sorted(lx, ux, lΔ, uΔ)

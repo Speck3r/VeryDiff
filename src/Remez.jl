@@ -30,7 +30,7 @@ Chebyshev approximation for function that can handle vector input more efficient
 """
 function chebyshev_approximation_vecfun(f, l, u, n)
     @assert l != u "l == u!!! Can't solve singular system! l = $l, u = $u"
-    x = VeryDiff.chebyshev_nodes(l, u, n+2)
+    x = chebyshev_nodes(l, u, n+2)
     y = f(x)
     
     B = x.^collect(0:n)'
@@ -52,6 +52,15 @@ args:
 function dpoly(ps)
     dps = [i*ps[i+1] for i in 1:length(ps)-1]
     return dps
+end
+
+
+"""
+Returns a function evaluating the polynomial p(x) = p₀ + p₁x + p₂x² + ... in 
+monomial basis.
+"""
+function make_eval_poly(ps::AbstractArray)
+    return x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
 end
 
 
@@ -115,7 +124,7 @@ function poly_error(ps, qs, l, u)
     δpoly[1:length(ps)] .+= ps
     δpoly[1:length(qs)] .-= qs
 
-    eval_poly = x -> sum(δpoly[k]*x^(k-1) for k in 1:length(δpoly))
+    eval_poly = make_eval_poly(δpoly)
 
     dδpoly = dpoly(δpoly)
     xs = real_roots(dδpoly)
@@ -145,7 +154,7 @@ returns:
 """
 function relu_error(ps, l::N, u::N) where N<:Number
     dps = dpoly(.-ps)
-    eval_poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+    eval_poly = make_eval_poly(ps)
     errfun = x -> max.(0, x) - eval_poly(x)
 
     # case 1: ReLU(x) = 0
@@ -583,7 +592,7 @@ function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), u
 
         errfun = (p, l, u) -> poly_error_cheby(ps, p, l, u)
     else  
-        poly = x -> sum(ps[k]*x^(k-1) for k in 1:length(ps))
+        poly = make_eval_poly(ps)
 
         if l == u 
             # how can that happen?

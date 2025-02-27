@@ -379,6 +379,13 @@ function find_good_poly_diff_approx(L::MonomialPoly, selector::AbstractVector, l
 end
 
 
+function find_good_poly_diff_approx(L::ChebyshevPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper)
+    find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], 
+                                ∂lower[selector], ∂upper[selector], 
+                                ChebyshevPolynomial.(eachrow(L.coeffs[selector,:]), L.l[selector], L.u[selector]))
+end
+
+
 
 function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
     return @timeit to "DiffZonotope_PolyReLUProp" begin

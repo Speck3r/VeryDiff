@@ -59,7 +59,8 @@ using Gurobi
 const GRB_ENV = Ref{Any}(nothing)
 
 include("Debugger.jl")
-include("Chebyshev.jl")
+include("chebyshev/Chebyshev.jl")
+include("chebyshev/chebyshev_interface.jl")
 include("Definitions.jl")
 include("Network.jl")
 include("Util.jl")

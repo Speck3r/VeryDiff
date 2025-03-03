@@ -468,16 +468,7 @@ function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::
             #zero_diff = ∂upper .== 0.0 .&& ∂lower .== 0.0
 
             # Compute Phase Behaviour
-            check = fill(false, output_dim)
-            #check = copy(zero_diff)
-
-            neg = (upper₂ .<= 0.) .&& .!check
-            check .|= neg
-            pos = (lower₂ .>= 0) .&& .!check 
-            check .|= pos 
-            unstable = (lower₂ .< 0) .&& (upper₂ .> 0) .&& .!check 
-            check .|= unstable
-            @assert all(check) "Not all cases covered!"
+            neg, pos, unstable = stability_mask(lower₂, upper₂)
         
             if USE_REWRITE_DIFF[]
                 crossing_new_generator = pos .| unstable

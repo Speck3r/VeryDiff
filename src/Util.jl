@@ -42,3 +42,24 @@ returns:
     true ⟺ polynomial represents linear function
 """
 islinear(v) = length(v) < 3 ? true : all(v[3:end] .== 0)
+
+
+"""
+Given lower and upper bounds for x ∈ [l, u], returns masks 
+
+neg = true iff always x ≤ 0
+pos = true iff always x ≥ 0
+unstable = true iff l < 0 < u
+"""
+function stability_mask(l, u)
+    check = falses(length(l))
+    neg = (u .<= 0.) .&& .!check
+    check .|= neg
+    pos = (l .>= 0) .&& .!check 
+    check .|= pos 
+    unstable = (l .< 0) .&& (u .> 0) .&& .!check 
+    check .|= unstable
+    @assert all(check) "Not all cases covered!"
+
+    return neg, pos, unstable
+end

@@ -31,6 +31,9 @@ const IMAG_TOL = Ref{Float64}(1e-10)
 """number of Remez algorithm iterations for polynomial approximation"""
 const REMEZ_ITERS = Ref{Int}(1)
 
+"""number of iterations for finding good relaxation for p(x)-ReLU(y)"""
+const OPTIM_ITERS = Ref{Int}(10)
+
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()
     BLAS.set_num_threads(1)

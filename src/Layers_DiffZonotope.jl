@@ -374,15 +374,40 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope{N,GN,
 end
 
 
-function find_good_poly_diff_approx(L::MonomialPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper)
-    find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], ∂lower[selector], ∂upper[selector], eachrow(L.coeffs[selector,:]))
+function poly_initial_slope_guess(l₁, u₁, l₂, u₂, ∂l, ∂u)
+    # currently only called, when l₂, u₂ is unstable
+    # a is always 0
+    # b has different cases 
+    # l₁, u₁ negative: involves a₂
+    # l₁, u₁ positive: involves λ₂ and coeff for Δ??? 
+    # instable: 
+    #   TODO: make it return a₁, a₂, aΔ          
+    neg, pos, unstable = stability_mask(l₁, u₁)
+    a = zero(l₁)
+    # TODO: what to do if ∂l == ∂u ?
+    ∂λ = ifelse.((∂l .== 0) .& (∂u .== 0), 0., clamp.(∂u ./ (∂u .- ∂l), 0., 1.))
+    b = ifelse.(unstable, ∂λ, 0.)
+    #b = ifelse.(neg, .-u₂ ./ (u₂ .- l₂), ifelse.(pos, .-l₂ ./ (u₂ .- l₂), 0))
+    return a, b
 end
 
 
-function find_good_poly_diff_approx(L::ChebyshevPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper)
+function find_good_poly_diff_approx(L::MonomialPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=0, b=0)
+    options = Optim.Options(iterations=OPTIM_ITERS[], show_trace=true)
     find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], 
                                 ∂lower[selector], ∂upper[selector], 
-                                ChebyshevPolynomial.(eachrow(L.coeffs[selector,:]), L.l[selector], L.u[selector]))
+                                eachrow(L.coeffs[selector,:]), 
+                                a[selector], b[selector], options=options)
+end
+
+
+function find_good_poly_diff_approx(L::ChebyshevPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=zero(lower₁), b=zero(lower₂))
+    # TODO: can't have a=0, b=0 as initialization if we use a[...] later on
+    options = Optim.Options(iterations=OPTIM_ITERS[])
+    find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], 
+                                ∂lower[selector], ∂upper[selector], 
+                                ChebyshevPolynomial.(eachrow(L.coeffs[selector,:]), L.l[selector], L.u[selector]), 
+                                a[selector], b[selector], options=options)
 end
 
 
@@ -520,8 +545,10 @@ function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::
             if any(selector)
                 Debugger.@diffrelu_case_hook unstable context="Unstable"
                 
+                a_init, b_init = poly_initial_slope_guess(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
+
                 # why is there no better way to handle broadcasted tuples?
-                res = find_good_poly_diff_approx(LΔ.layer1, selector, lower₁, upper₁, ∂lower, ∂upper)
+                res = find_good_poly_diff_approx(LΔ.layer1, selector, lower₁, upper₁, ∂lower, ∂upper, a_init, b_init)
                 #res = find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], ∂lower[selector], ∂upper[selector], eachrow(LΔ.coeffs[selector,:]))
                 a = getindex.(res, 1)  # slope of x
                 b = getindex.(res, 2)  # slope of Δ 

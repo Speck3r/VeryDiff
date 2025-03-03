@@ -225,9 +225,11 @@ args:
     uΔ - concrete upper bound on Δ
     ps - vector of monomial coefficients of p in order [p₀, p₁, ...]
 
-kwargs:
+optional args:
     a - initial value for coefficient of x in the linear relaxation 
     b - initial value for coefficient of Δ in the linear relaxation 
+
+kwargs:
     alg - algorithm used for optimization (default: NelderMead) (any algorithm from Optim.jl can be used)
     options - Optim.Options() for passing parameters to the optimizer
 
@@ -237,12 +239,14 @@ returns:
     c - bias of the linear relaxation 
     ϵ - coefficient of the new error term in the linear relaxation
 """
-function find_good_poly_diff_approx(lx, ux, lΔ, uΔ, ps; a=0., b=0., alg=NelderMead(), options=Optim.Options())
-    optfun = a -> parallel_diff_relaxation(lx, ux, lΔ, uΔ, ps, a[1], a[2])[2]
+function find_good_poly_diff_approx(lx, ux, lΔ, uΔ, ps, a=0., b=0.; alg=NelderMead(), options=Optim.Options())
+    a_best = [a, b]
+    if options.iterations > 0
+        optfun = a -> parallel_diff_relaxation(lx, ux, lΔ, uΔ, ps, a[1], a[2])[2]
 
-    a₀ = [a, b]
-    res = optimize(optfun, a₀, alg, options)
-    a_best = Optim.minimizer(res)
+        res = optimize(optfun, a_best, alg, options)
+        a_best = Optim.minimizer(res)
+    end
 
     c, ϵ = parallel_diff_relaxation(lx, ux, lΔ, uΔ, ps, a_best[1], a_best[2])
 

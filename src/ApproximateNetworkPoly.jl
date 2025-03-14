@@ -36,7 +36,7 @@ function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verb
     lower = @view bounds[:,1]
     upper = @view bounds[:,2]
 
-    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=5, cheby=cheby)
+    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=20, cheby=cheby)
     ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
     ϵs = getindex.(res, 2)  # don't really need them, just for debugging 
 

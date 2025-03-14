@@ -1,6 +1,6 @@
 
 using VeryDiff, LinearAlgebra, VNNLib, Optim
-import VeryDiff: load_polynomial_nn, load_approximation_bounds
+import VeryDiff: load_polynomial_nn, load_approximation_bounds, Poly
 
 model_file = "./test/examples/networks/mnist-net_256x6.onnx"
 poly_dir = "./test/examples/poly_coeffs/models/mnist_fc/poly_2/"
@@ -54,10 +54,12 @@ res = optimize(optfun, -0.05 .* ones(784), 0.05 .* ones(784), x₀, SAMIN(),
                Optim.Options(show_trace=true, show_every=1000, iterations=10000))
 
 
+## scribbling
 
 
-
-
-
+Z_original1 = Zonotope(I(45) .* 2., rand(45), nothing);
+Z_original2 = deepcopy(Z_original1)
+∂Z_original = Zonotope(zeros(45, 45), zeros(45), nothing)
+Z_original = DiffZonotope(Z_original1, Z_original2, ∂Z_original, 0, 0, 0);
 
 

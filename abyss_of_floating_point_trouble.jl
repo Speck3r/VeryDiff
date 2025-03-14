@@ -9,7 +9,7 @@ degree = 100
 kind = 2
 
 fc = VeryDiff.chebyshev_approximation(f, l, u, degree, kind=kind)
-fp = x -> sum(fc[k]*x^(k-1) for k in 1:length(fc))
+fp = make_eval_poly(fc)
 
 fc_cheb = VeryDiff.chebyshev_coefficients(f, l, u, degree, kind=kind)
 fp_cheb = x -> VeryDiff.clenshaw_chebyshev(fc_cheb, x, l, u)

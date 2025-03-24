@@ -27,33 +27,37 @@ function get_zono_bounds(net::Network, input_set::Zonotope)
 end
 
 
-function approximate_polynomial(L::Dense, bounds, degree; cheby=true, verbosity=0)
+function approximate_polynomial(L::Dense, bounds, degree; cheby=true, verbosity=0, max_iter=20)
     # nothing to do here
     return L    
 end
 
-function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verbosity=0)
+function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verbosity=0, max_iter=20)
     lower = @view bounds[:,1]
     upper = @view bounds[:,2]
 
-    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=20, cheby=cheby)
+    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
     ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
     ϵs = getindex.(res, 2)  # don't really need them, just for debugging 
 
-    verbosity > 0 && println("max error = ", maximum(ϵs))
+    max_idx = argmax(ϵs)
+    verbosity > 0 && println("max error = ", ϵs[max_idx], " at idx ", max_idx, " with bounds ", lower[max_idx], " ", upper[max_idx])
+
+    #verbosity > 0 && println("max error = ", maximum(ϵs))
+
 
     layer = cheby ? ChebyshevPoly(Matrix(ps), lower, upper) : MonomialPoly(Matrix(ps))
     return layer
 end
 
 
-function approximate_polynomial(L::Poly, bounds, degree; cheby=true, verbosity=0)
+function approximate_polynomial(L::Poly, bounds, degree; cheby=true, verbosity=0, max_iter=20)
     @warn "skipping already polynomial layer (but degree might differ!/Cheby vs. Monomial Form might not match!)"
     return L    
 end
 
 
-function approximate_polynomial(net::Network, bounds::AbstractVector, degree; cheby=true, verbosity=0)
+function approximate_polynomial(net::Network, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20)
     # attention: bounds are bounds AFTER the layer
     # for ReLU layers, we need the bound after the linear layer before that, the linear layers don't need any bounds
     bounds = [[[]]; bounds[1:end-1]]
@@ -62,23 +66,22 @@ function approximate_polynomial(net::Network, bounds::AbstractVector, degree; ch
 end
 
 
-function approximate_polynomial_iterative(net::Network, input_set, degree; verbosity=0, cheby=true)
+function approximate_polynomial_iterative(net, input_set, degree; verbosity=0, cheby=true, max_iter=20)
     prop_state = PropState(true)
     layers_poly = []
-    bound = zono_bounds(input_set)
+    ẑ = input_set
     for i in 1:length(net.layers)
+        bounds_layer = zono_bounds(ẑ)
         layer = net.layers[i]
-        layer_poly = approximate_polynomial(layer, bound, degree, cheby=cheby, verbosity=verbosity)
+        layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter)
         push!(layers_poly, layer_poly)
 
-        net_partial = Network(layers_poly)
-        ẑ = net_partial(input_set, prop_state)
-        bound = zono_bounds(ẑ)
+        ẑ = layer_poly(ẑ, prop_state)
 
         verbosity > 0 && println("--- layer $i ---")
-        verbosity > 0 && println("lower = ", bound[:,1][1:min(size(bound, 1), 5)])
-        verbosity > 0 && println("upper = ", bound[:,2][1:min(size(bound, 1), 5)])
+        verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
+        verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
     end
 
-    return Network(layers_poly)
+    return Network(layers_poly)   
 end

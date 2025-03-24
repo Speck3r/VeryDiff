@@ -388,6 +388,7 @@ kwargs:
 """
 function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max_iter=10, tol=N(1e-10), plotting=false, cheby=true) where N<:Number
     @assert l <= u "Approximation domain must be non-degenerate! Got [$l, $u]"
+    @assert max_iter > 0 "max_iter > 0 required! Got $max_iter"
 
     # alternating signs
     sigma = ones(N, degree+2)

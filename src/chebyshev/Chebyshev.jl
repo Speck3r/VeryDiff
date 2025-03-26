@@ -199,7 +199,12 @@ args:
     u - upper bound on approximation domain of p(x) (default 1)
 """
 function chebyshev_roots(cs::AbstractVector{N}, l=-one(N), u=one(N)) where N<:Number
-    ~(abs(cs[end]) > 0.) && println("l = ", l, ", u = ", u, ", cs = ", cs)
+    if ~(abs(cs[end]) > 0.)
+        @warn "Chebyshev polynomial has almost zero leading coefficient. l = $l, u = $u, cs = $(cs).\nTruncating to last non-zero coefficient."
+        nz_idx = maximum(findall(!iszero, cs), init=-1)
+        cs = cs[1:nz_idx]
+    end
+
     if length(cs) <= 1
         # a constant polynomial has either zero or infinitely many roots.
         return Vector{N}()

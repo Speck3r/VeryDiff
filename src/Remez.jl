@@ -608,14 +608,14 @@ function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), u
     p_lin, ϵ = remez(poly, errfun, poly_norm, l, u, 1, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=cheby)
     β, α = p_lin
 
-    if cheby
-        # need to unnormalize from [-1, 1] to [l, u]
-        scale = 2/(u-l)
-        bias  = -(l+u)/(u-l)
-        α_temp = α
-        α = scale * α
-        β = β + α_temp*bias
-    end
+    #if cheby
+    #    # need to unnormalize from [-1, 1] to [l, u]
+    #    scale = 2/(u-l)
+    #    bias  = -(l+u)/(u-l)
+    #    α_temp = α
+    #    α = scale * α
+    #    β = β + α_temp*bias
+    #end
 
     return α, β, ϵ
 end

@@ -147,6 +147,40 @@ function load_approximation_bounds(nn, poly_dir)
 end
 
 
+function extract_approximation_domain(L::ReLU)
+    return nothing    
+end
+
+function extract_approximation_domain(L::ChebyshevPoly)
+    return L.l, L.u
+end
+
+function extract_approximation_domain(L::MonomialPoly)
+    return nothing
+end
+
+function extract_approximation_domain(L::Dense)
+    return nothing
+end
+
+
+"""
+Extracts the approximation domain for the polynomial activations of the given network.
+
+Polynomial approximations quickly diverge to ±∞ outside of the approximation domain, therefore
+we need to know the bounds of the approximation domain (pre-activation values for the original activation function) for each layer.
+
+returns:
+    list of n×2 matrices where bounds[i][1], bounds[i][2] are the lower and upper bounds of the approximation domain
+     of the i-th layer or nothing if the layer is not a polynomial activation layer.
+"""
+function extract_approximation_domain(net::Network)
+    res = extract_approximation_domain.(net.layers)
+    [isnothing(r) ? nothing : [r[1] r[2]] for r in res]
+end
+
+
+
 """
 Loads network whose activation functions have been replaced by the polynomials with 
 coefficients specified in the given directory.

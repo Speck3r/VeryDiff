@@ -595,6 +595,15 @@ function (N::GeminiNetwork)(Z :: DiffZonotope, P :: PropState)
 end
 
 
+"""
+Propagate the input zonotope through the GeminiNetwork.
+
+args:
+- `Z`: the input zonotope
+- `P`: the propagation state
+- `bounds_x`: pre-activation bounds for the first network
+- `bounds_y`: pre-activation bounds for the second network
+"""
 function (N::GeminiNetwork)(Z::DiffZonotope, P::PropState, bounds_x::Union{Nothing,AbstractVector}, bounds_y::Union{Nothing,AbstractVector})
     bounds_x = isnothing(bounds_x) ? [nothing for i in 1:length(N.network1.layers)] : bounds_x
     bounds_y = isnothing(bounds_y) ? [nothing for i in 1:length(N.network2.layers)] : bounds_y

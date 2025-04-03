@@ -35,6 +35,9 @@ const REMEZ_ITERS = Ref{Int}(1)
 """number of iterations for finding good relaxation for p(x)-ReLU(y)"""
 const OPTIM_ITERS = Ref{Int}(10)
 
+"""print warning if leading coefficient of polynomial for which we want to compute roots is close to zero"""
+const ALMOST_ZERO_LEADING_COEFF_WARNING = Ref{Bool}(true)
+
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()
     BLAS.set_num_threads(1)

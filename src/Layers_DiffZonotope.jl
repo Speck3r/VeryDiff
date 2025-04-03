@@ -411,6 +411,31 @@ function find_good_poly_diff_approx(L::ChebyshevPoly, selector::AbstractVector, 
 end
 
 
+"""
+Find linear relaxation for p(x) - ReLU(y), when y ≥ 0.
+
+args:
+    L - the current polynomial layer
+    selector - indices or mask of the neurons where y ≥ 0 is true 
+    lower₁ - concrete lower bounds on x
+    upper₁ - concrete upper bounds on y 
+
+returns:
+    α, β, γ - s.t. α*x + β - γ ≤ p(x) - x ≤ α*x + β + γ
+"""
+function poly_pos_approx(L::ChebyshevPoly, selector::AbstractVector, lower₁, upper₁)
+    # compute chebyshev representation of -x for the same approximation domain as the given polynomials.
+    # since -x is linear, we only need the first two coefficients and can thus always just use degree 1.
+    id_neg = (l, u) -> VeryDiff.chebyshev_coefficients(x -> -x, l, u, 1)
+    csx = hcat((id_neg.(L.l[selector], L.u[selector]))...)'  # make it a matrix
+
+    cs_diff = copy(L.coeffs[selector,:])
+    cs_diff[:, 1:2] .+= csx
+
+    get_linear_relaxation_cheby(cs_diff, L.l[selector], L.u[selector], lower₁[selector], upper₁[selector])
+end
+
+
 
 function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
     return @timeit to "DiffZonotope_PolyReLUProp" begin
@@ -505,7 +530,9 @@ function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::
             num_approx₁_additional = num_approx₁-Z.num_approx₁
             num_approx₂_additional = num_approx₂-Z.num_approx₂
             ∂num_approx = Z.∂num_approx+count(crossing_new_generator)
-            ∂num_approx_additional = ∂num_approx-Z.∂num_approx       
+            ∂num_approx_additional = ∂num_approx-Z.∂num_approx     
+            
+            generator_offset = input_dim+num_approx₁+num_approx₂+Z.∂num_approx+1
 
             Ĝ = zeros(N,
                 output_dim,
@@ -530,7 +557,28 @@ function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::
             if any(selector)
                 Debugger.@diffrelu_case_hook pos context="Pos"
                 if USE_REWRITE_DIFF[]
-                    @assert false "Not implemented yet!"
+                    # with Δ = x - y, we know that y = x - Δ
+                    # thus p(x) - ReLU(y) = p(x) - ReLU(x - Δ) = p(x) - (x - Δ) = (p(x) - x) + Δ
+                    # ideally, the range of Δ is much smaller than the range of y, 
+                    # while the range of p(x) - x is not much worse than the range of p(x)
+
+                    # α*x + β - γ ≤ p(x) - x ≤ α*x + β + γ
+                    α, β, γ = poly_pos_approx(LΔ.layer1, selector, lower₁, upper₁)
+                   
+                    # input generators: just α*Z₁ + ∂Z
+                    Ĝ[selector, 1:input_dim] .= α .* (@view Z.Z₁.G[selector, 1:input_dim]) .+ (@view Z.∂Z.G[selector, 1:input_dim])
+                    # generators from NN₁: just α*Z₁ + ∂Z
+                    Ĝ[selector, input_dim+1:input_dim+Z.num_approx₁] .= α .* (@view Z.Z₁.G[selector, input_dim+1:end]) .+ 
+                                                                             (@view Z.∂Z.G[selector, input_dim+1:input_dim+Z.num_approx₁])
+                    # generators from NN₂: only ∂Z (there are no generators from NN₂ in Z₁)
+                    Ĝ[selector, input_dim+num_approx₁+1:input_dim+num_approx₁+Z.num_approx₂] .= (@view Z.∂Z.G[selector, input_dim+Z.num_approx₁+1:input_dim+Z.num_approx₁+Z.num_approx₂])
+                    # generators from differential verification: (∂Z | γ) (no differential generators in Z₁ and we have to add new generators to account for overapproximation)
+                    Ĝ[selector, input_dim+num_approx₁+num_approx₂+1:end-∂num_approx_additional] .= (@view Z.∂Z.G[selector, input_dim+Z.num_approx₁+Z.num_approx₂+1:end])
+                    Ĝ[selector, generator_offset:generator_offset+count(selector)-1] = I(count(selector)) .* γ
+                    # make sure those new generators don't get overwritten later on 
+                    generator_offset += count(selector)
+                    
+                    ĉ[selector] .= α .* (@view Z.Z₁.c[selector]) .+ (@view Z.∂Z.c[selector]) .+ β
                 else
                     # p(x) - ReLU(y) = p(x) - y -> just subtract the individual zonotopes
                     Ĝ[selector, 1:input_dim] .= (@view Z₁_new.G[selector,1:input_dim]) .- (@view Z₂_new.G[selector,1:input_dim])
@@ -555,11 +603,6 @@ function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::
                 c = getindex.(res, 3)  # bias 
                 ϵ = getindex.(res, 4)  # new error term
 
-                #@show a 
-                #@show b
-                #@show c
-                #@show ϵ
-
                 # a*ex + b*eΔ
                 Ĝ[selector, 1:input_dim] .= a .* (@view Z.Z₁.G[selector, 1:input_dim]) .+ b .* (@view Z.∂Z.G[selector, 1:input_dim])
                 # a*a'x + b*a'Δ
@@ -569,7 +612,7 @@ function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::
                 Ĝ[selector, input_dim+num_approx₁+1:input_dim+num_approx₁+Z.num_approx₂] .= b .* (@view Z.∂Z.G[selector, input_dim+Z.num_approx₁+1:input_dim+Z.num_approx₁+Z.num_approx₂])
                 # (b*aΔ | δ)
                 Ĝ[selector, input_dim+num_approx₁+num_approx₂+1:end-∂num_approx_additional] .= b .* (@view Z.∂Z.G[selector, input_dim+Z.num_approx₁+Z.num_approx₂+1:end])
-                Ĝ[selector, end-∂num_approx_additional+1:end] .= I(count(selector)) .* ϵ
+                Ĝ[selector, generator_offset:end] .= I(count(selector)) .* ϵ
 
                 ĉ[selector] .= a .* (@view Z.Z₁.c[selector]) .+ b .* (@view Z.∂Z.c[selector]) .+ c
             end

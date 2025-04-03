@@ -72,15 +72,18 @@ function approximate_polynomial_iterative(net, input_set, degree; verbosity=0, c
     ẑ = input_set
     for i in 1:length(net.layers)
         bounds_layer = zono_bounds(ẑ)
+
+        verbosity > 0 && println("--- layer $i ---")
+        verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
+        verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
+        !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
+        !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
+
         layer = net.layers[i]
         layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter)
         push!(layers_poly, layer_poly)
 
         ẑ = layer_poly(ẑ, prop_state)
-
-        verbosity > 0 && println("--- layer $i ---")
-        verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
-        verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
     end
 
     return Network(layers_poly)   

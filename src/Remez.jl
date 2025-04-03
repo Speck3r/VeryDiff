@@ -407,7 +407,7 @@ function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max
 
     verbosity > 0 && println("step, |error|,  |level|,  tol_diff, ref_diff")
 
-    for i in 1:max_iter       
+    for i in 1:max_iter  
         f_cur = f.(x_cur)
         #w  = barycentric_weights(x_cur)
         w = baryweights_chebfun(x_cur)
@@ -570,21 +570,28 @@ default args: (they can be ignored if dealing with polynomials in monomial basis
     û - upper bound for approximation domain of the original polynomial p(x) (default  1)
 
 kwargs:
-    verbosity 
-    tol 
-    max_iter 
-    cheby
+    verbosity - verbosity argument for Remez algorithm
+    tol - stopping tolerance for Remez algorithm
+    max_iter - maximum number of Remez iterations to find the linear approximation
+    cheby - whether polynomial is given in Chebyshev basis (in this case also the linear approximation will be returned in Chebyshev basis)
+
+returns:
+    α - coefficient of x in monomial form or coefficient of T₁(x) for scaling to x ∈ [l, u] for chebyshev form 
+    β - coefficient of 1 in monomial form or coefficient of T₀(x) for scaling to x ∈ [l, u] for chebyshev form
+    ϵ - maximum approximation error of the linear function given by α and β
 """
 function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), û=one(N); verbosity=0, tol=N(1e-10), max_iter=10, cheby=true) where N<:Number
+    # println("l = $l, u = $u, l̂ = $l̂, û = $û, ps = $ps")
     if cheby 
         # need to get polynomials to common domain, s.t. we can just add and subtract the coefficient vectors.
-        poly = x -> clenshaw_chebyshev(ps, x, l̂, û)
+        # anonymous function value changes, when we change ps later on !!! (see https://discourse.julialang.org/t/anonymous-functions-and-overwriting-arguments/127586)
+        # poly = x -> clenshaw_chebyshev(ps, x, l̂, û)
+        poly = make_eval_chebyshev(ps, l̂, û)
 
-        if l == u 
+        if (l̂ == û) && all(ps .== 0)
             # how can that happen?
             # TODO: better solution than just an if?
-            y = poly(l)
-            return zero(N), y, zero(N)
+            return zero(N), poly(l), zero(N)
         end
 
         degree = length(ps) - 1
@@ -598,8 +605,7 @@ function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), u
         if l == u 
             # how can that happen?
             # TODO: better solution than just an if?
-            y = poly(l)
-            return zero(N), y, zero(N)
+            return zero(N), poly(y), zero(N)
         end
 
         errfun = (p, l, u) -> poly_error(ps, p, l, u)
@@ -607,15 +613,6 @@ function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), u
 
     p_lin, ϵ = remez(poly, errfun, poly_norm, l, u, 1, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=cheby)
     β, α = p_lin
-
-    #if cheby
-    #    # need to unnormalize from [-1, 1] to [l, u]
-    #    scale = 2/(u-l)
-    #    bias  = -(l+u)/(u-l)
-    #    α_temp = α
-    #    α = scale * α
-    #    β = β + α_temp*bias
-    #end
 
     return α, β, ϵ
 end

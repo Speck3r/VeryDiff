@@ -14,6 +14,8 @@ Computes the boundary points of H ∩ {x ≤ y} and H ∩ {x ≥ y} sorted in co
 Tests for each corner of H and for each possible intersection with x = y in counter-clockwise order
 in which part of the half-space the point is included and adds it to the respective list.
 
+Note that one of the vectors can be empty, e.g. if H is [3,4] × [0, 1]
+
 args:
     lx - lower x value of H
     ux - upper x value of H
@@ -21,7 +23,7 @@ args:
     uy - upper y value of H
 
 returns:
-    (ps_leq, ps_geq) - vectors of points [p1, p2, ..., pn, p1]
+    (ps_leq, ps_geq) - vectors of points [p1, p2, ..., pn, p1] (vectors can be empty!)
 """
 function get_boundary_sorted(lx::N, ux::N, ly::N, uy::N) where N<:Number
     # H is hyperrectangle [lx,ux] × [ly,uy]
@@ -71,12 +73,19 @@ function get_boundary_sorted(lx::N, ux::N, ly::N, uy::N) where N<:Number
         test_point((lx, lx))
     end
 
+    
+    #if length(ps_leq) == 0
+    #    println("lx = ", lx, ", ux = ", ux, ", ly = ", ly, ", uy = ", uy)
+    #    println("ps_leq = ", ps_leq)
+    #    println("ps_geq = ", ps_geq)
+    #end
+
     # want points to be [p1, p2, ..., pn, p1]
-    if ps_leq[end] != ps_leq[1]
+    if !isempty(ps_leq) && (ps_leq[end] != ps_leq[1])
         push!(ps_leq, ps_leq[1])
     end
 
-    if ps_geq[end] != ps_geq[1]
+    if !isempty(ps_geq) && (ps_geq[end] != ps_geq[1])
         push!(ps_geq, ps_geq[1])
     end
 
@@ -197,14 +206,28 @@ function parallel_diff_relaxation(lx, ux, lΔ, uΔ, ps, a, b)
     ps_leq, ps_geq = get_boundary_sorted(lx, ux, lΔ, uΔ)
 
     # ReLU(x - Δ) inactive, if x ≤ Δ
-    crit_leq = relax_diff_inact(ps_leq, ps, a, b)
-    crit_geq = relax_diff_act(ps_geq, ps, a, b)
+    if !isempty(ps_leq)
+        crit_leq = relax_diff_inact(ps_leq, ps, a, b)
+        ϵs_leq = f.(first.(crit_leq), last.(crit_leq))
+    else
+        ϵs_leq = []
+    end
 
-    ϵs_leq = f.(first.(crit_leq), last.(crit_leq))
-    ϵs_geq = f.(first.(crit_geq), last.(crit_geq))
+    if !isempty(ps_geq)
+        # ReLU(x - Δ) active, if x ≥ Δ
+        crit_geq = relax_diff_act(ps_geq, ps, a, b)
+        ϵs_geq = f.(first.(crit_geq), last.(crit_geq))
+    else
+        ϵs_geq = []
+    end
+    #crit_leq = relax_diff_inact(ps_leq, ps, a, b)
+    #crit_geq = relax_diff_act(ps_geq, ps, a, b)
+
+    #ϵs_leq = f.(first.(crit_leq), last.(crit_leq))
+    #ϵs_geq = f.(first.(crit_geq), last.(crit_geq))
    
-    ϵ_max = max(maximum(ϵs_leq), maximum(ϵs_geq))
-    ϵ_min = min(minimum(ϵs_leq), minimum(ϵs_geq))
+    ϵ_max = max(maximum(ϵs_leq, init=-Inf), maximum(ϵs_geq, init=-Inf))
+    ϵ_min = min(minimum(ϵs_leq, init=Inf), minimum(ϵs_geq, init=Inf))
 
     c = 0.5*(ϵ_min + ϵ_max)
     ϵ = 0.5*(ϵ_max - ϵ_min)

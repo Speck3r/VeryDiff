@@ -116,6 +116,12 @@ returns:
     p(x) - value of p at input x
 """
 function clenshaw_chebyshev(cs::AbstractVector{N}, x, l=-one(N), u=one(N); printing=false) where N<:Number
+    if (l == u) && all(cs .== 0)
+        # if all coeffs are 0, we know that p(x) = 0 anyways.
+        # for other cases, where l == u, the error gets caught below.
+        return zero(N)
+    end
+    @assert (u - l) != 0 "Lower and upper domain of chebyshev polyonomial are equal: [l, u] = [$l, $u] - division by zero in normalization to [-1, 1]!"
     # normalize to [-1, 1]
     x = (x - 0.5*(u+l)) / (0.5*(u-l))
 
@@ -200,7 +206,7 @@ args:
 """
 function chebyshev_roots(cs::AbstractVector{N}, l=-one(N), u=one(N)) where N<:Number
     if ~(abs(cs[end]) > 0.)
-        @warn "Chebyshev polynomial has almost zero leading coefficient. l = $l, u = $u, cs = $(cs).\nTruncating to last non-zero coefficient."
+        ALMOST_ZERO_LEADING_COEFF_WARNING[] && @warn "Chebyshev polynomial has almost zero leading coefficient. l = $l, u = $u, cs = $(cs).\nTruncating to last non-zero coefficient."
         nz_idx = maximum(findall(!iszero, cs), init=-1)
         cs = cs[1:nz_idx]
     end
@@ -210,6 +216,9 @@ function chebyshev_roots(cs::AbstractVector{N}, l=-one(N), u=one(N)) where N<:Nu
         return Vector{N}()
     else
         Cm = colleague_matrix(cs)
+
+        @assert all(isfinite, Cm) "Colleague matrix is not finite. l = $l, u = $u, cs = $(cs)."
+
         vals = eigvals(Cm)
 
         rs = real.(vals[abs.(imag.(vals)) .< IMAG_TOL[]])

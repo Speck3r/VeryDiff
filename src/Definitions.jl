@@ -5,7 +5,7 @@ mutable struct Zonotope{N<:Number,GN<:AbstractMatrix{N},CN<:AbstractVector{N}}
 end
 
 function Zonotope(G::GN,c::CN,influence) where {GN,CN}
-    Zonotope(G, c, GN(influence))
+    Zonotope(G, c, isnothing(influence) ? nothing : GN(influence))
 end
 
 

@@ -631,7 +631,10 @@ function approx_relu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10)
         if cheby 
             # although T₁(x) = x, we cannot just set p[2] = 1 in the Chebyshev case because it is evaluated 
             # w.r.t x ∈ [l, u], i.e. that would be T₁((x - 0.5(l + u))/(0.5 * (u - l))) ≠ x
-            p = chebyshev_coefficients(f, l, u, degree)
+            # only need degree 1 for linear functions
+            cs = chebyshev_coefficients(f, l, u, 1)
+            p = zeros(N, degree+1)
+            p[1:2] .= cs
         else        
             p = zeros(N, degree+1)
             p[2] = one(N)

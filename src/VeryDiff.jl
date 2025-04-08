@@ -30,7 +30,7 @@ const TIGHTEN_BOUNDS_DIFF = Ref{Bool}(false)
 const IMAG_TOL = Ref{Float64}(1e-10)
 
 """number of Remez algorithm iterations for polynomial approximation"""
-const REMEZ_ITERS = Ref{Int}(1)
+const REMEZ_ITERS = Ref{Int}(10)
 
 """number of iterations for finding good relaxation for p(x)-ReLU(y)"""
 const OPTIM_ITERS = Ref{Int}(10)

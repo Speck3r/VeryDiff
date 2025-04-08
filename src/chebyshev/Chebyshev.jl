@@ -248,6 +248,10 @@ returns:
     cp - Chebyshev coefficients s.t. d/dx p(x) = cp₀T₀(x) + cp₁T₁(x) + ...
 """
 function chebyshev_derivative(cs::AbstractVector{N}, l=-one(N), u=one(N)) where N<:Number
+    if (l == u) && all(cs .== 0)
+        return zeros(N, length(cs)-1)
+    end
+    @assert l != u "Equal lower and upper bounds will cause a div-by-zero during normalization! Got l = $l, u = $u, cs = $cs"
     # c_0' = c_1 + (1/2) c_2'
     # c_n' = 2(n+1)c_{n+1} + c_{n+2}'  (if n > 0)
     # c_n' = 0 if original function only had degree n

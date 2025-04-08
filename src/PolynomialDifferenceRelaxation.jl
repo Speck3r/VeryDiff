@@ -109,6 +109,7 @@ returns:
 """
 function relax_diff_inact(boundary, ps, a::N, b::N) where N<:Number
     dps = dpoly(ps)
+    @assert all(isfinite.(dps)) "d/dx ps is non-finite: ps = $ps, dps = $dps"
     # d/dx p(x) - ax
     dpa = copy(dps)
     dpa[1] -= a
@@ -263,6 +264,8 @@ returns:
     ϵ - coefficient of the new error term in the linear relaxation
 """
 function find_good_poly_diff_approx(lx, ux, lΔ, uΔ, ps, a=0., b=0.; alg=NelderMead(), options=Optim.Options())
+    @assert all(isfinite.(ps)) "polynomial not finite: ps = $ps, lx = $lx, ux = $ux, lΔ = $lΔ, uΔ = $uΔ"
+
     a_best = [a, b]
     if options.iterations > 0
         optfun = a -> parallel_diff_relaxation(lx, ux, lΔ, uΔ, ps, a[1], a[2])[2]

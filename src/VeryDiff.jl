@@ -33,7 +33,7 @@ const IMAG_TOL = Ref{Float64}(1e-10)
 const REMEZ_ITERS = Ref{Int}(10)
 
 """number of iterations for finding good relaxation for p(x)-ReLU(y)"""
-const OPTIM_ITERS = Ref{Int}(10)
+const OPTIM_ITERS = Ref{Int}(0)
 
 """print warning if leading coefficient of polynomial for which we want to compute roots is close to zero"""
 const ALMOST_ZERO_LEADING_COEFF_WARNING = Ref{Bool}(true)

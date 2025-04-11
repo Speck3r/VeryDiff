@@ -21,7 +21,7 @@ USE_GUROBI = true
 USE_DIFFZONO = true
 
 """use p(x) - ReLU(y) = p(x) - (x - Δ) in the active ReLU case instead of p(x) - y"""
-const USE_REWRITE_DIFF = Ref{Bool}(false)
+const USE_REWRITE_DIFF = Ref{Bool}(true)
 
 """use bounds from difference zonotope to tighten individual network bounds"""
 const TIGHTEN_BOUNDS_DIFF = Ref{Bool}(false)

@@ -107,7 +107,7 @@ args:
 returns:
     vector of 2d critical points 
 """
-function relax_diff_inact(boundary, ps, a::N, b::N) where N<:Number
+function relax_diff_inact(boundary, ps, a::N, b::N; inact_feasible=true) where N<:Number
     dps = dpoly(ps)
     @assert all(isfinite.(dps)) "d/dx ps is non-finite: ps = $ps, dps = $dps"
     # d/dx p(x) - ax
@@ -128,7 +128,9 @@ function relax_diff_inact(boundary, ps, a::N, b::N) where N<:Number
         # if b == 0, we have p(x) - ax and we get the same value everywhere regardless of Δ, 
         # so we just need to choose a feasible value of Δ.
         # since we are in the x ≤ Δ case, we need Δ to be at least as large as x
-        length(rs) > 0 && push!(critical_points, [(r, clamp(0.5*(lΔ + uΔ), r, uΔ)) for r in rs]...)
+        (length(rs) > 0 && inact_feasible) && push!(critical_points, [(r, clamp(0.5*(lΔ + uΔ), r, uΔ)) for r in rs]...)
+        # if we are in the x ≥ Δ case, we need Δ to bet at most as large as x
+        (length(rs) > 0 && !inact_feasible) && push!(critical_points, [(r, clamp(0.5*(lΔ + uΔ), lΔ, r)) for r in rs]...)
     end
 
     # boundary
@@ -173,9 +175,9 @@ end
 
 
 # for relax_diff_inact, we have f(x, Δ) = p(x) - ax - bΔ
-# for relax_diff_act, we have f(x, Δ) = p(x) - x + Δ - ax - bΔ = p(x) - (1+a)x - (1-b)Δ
+# for relax_diff_act, we have f(x, Δ) = p(x) - x + Δ - ax - bΔ = p(x) - (1+a)x - (b-1)Δ
 # so we can just reuse the inact case
-relax_diff_act(boundary, ps, a, b) = relax_diff_inact(boundary, ps, 1+a, 1-b)
+relax_diff_act(boundary, ps, a, b) = relax_diff_inact(boundary, ps, 1+a, b-1, inact_feasible=false)
 
 
 """

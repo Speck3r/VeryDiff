@@ -2,6 +2,31 @@ using VeryDiff, LinearAlgebra, VNNLib, DoubleFloats, Plots
 import VeryDiff: approximate_polynomial_iterative, approximate_polynomial
 
 
+
+function interleaved_approximate_polynomial(net, input_set, degree; verbosity=0, cheby=true, max_iter=20)
+    prop_state = PropState(true)
+    layers_poly = []
+    ẑ = input_set
+    for i in 1:length(net.layers)
+        bounds_layer = zono_bounds(ẑ)
+        layer = net.layers[i]
+        layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter)
+        push!(layers_poly, layer_poly)
+
+        ẑ = layer_poly(ẑ, prop_state)
+
+        verbosity > 0 && println("--- layer $i ---")
+        verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
+        verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
+    end
+
+    return Network(layers_poly)   
+end
+
+
+
+
+
 function get_empirical_bounds(net::Network, z::Zonotope; n_inputs=1000)
     bounds = []
 
@@ -53,7 +78,8 @@ test_set = [VeryDiff.random_point(z) for _ in 1:10000]
 ys = [nn(x) for x in test_set]
 Y  = hcat(ys...)';
 
-nn_poly = approximate_polynomial_iterative(nn, z, 100, verbosity=1, cheby=true)
+t1 = @elapsed nn_poly = approximate_polynomial_iterative(nn, z, 100, verbosity=1, cheby=true);
+t2 = @elapsed nn_poly2 = interleaved_approximate_polynomial(nn, z, 100, verbosity=1, cheby=true);
 
 bnds_relu = VeryDiff.get_zono_bounds(nn, z)
 bnds_poly = VeryDiff.get_zono_bounds(nn_poly, z);
@@ -66,8 +92,8 @@ nn_poly = approximate_polynomial_iterative(nn, z, 100, verbosity=1, cheby=true);
 
 println("## Zono bounds")
 maes_zono = []
-for degree in 1:2:100
-    nn_poly = approximate_polynomial_iterative(nn, z, degree, verbosity=0, cheby=true)
+for degree in 100:25:300
+    nn_poly = approximate_polynomial_iterative(nn, z, degree, verbosity=1, cheby=true)
     ys_poly = [nn_poly(x) for x in test_set]
     Y_poly = hcat(ys_poly...)'
 
@@ -75,6 +101,20 @@ for degree in 1:2:100
     mae = sum(maximum(abs.(Y .- Y_poly), dims=2)) / size(Y, 1)
     println("degree = ", degree, " - mse = ", mse, " - mae = ", mae)
     push!(maes_zono, mae)
+end
+
+
+println("## Zono bounds + Chebyshev only (no Remez)")
+#maes_cheby_zono = []
+for degree in 102:2:200
+    nn_poly = approximate_polynomial_iterative(nn, z, degree, verbosity=0, cheby=true, max_iter=1)
+    ys_poly = [nn_poly(x) for x in test_set]
+    Y_poly = hcat(ys_poly...)'
+
+    mse = sum(sum((Y .- Y_poly).^2, dims=2)) / size(Y, 1)
+    mae = sum(maximum(abs.(Y .- Y_poly), dims=2)) / size(Y, 1)
+    println("degree = ", degree, " - mse = ", mse, " - mae = ", mae)
+    push!(maes_cheby_zono, mae)
 end
 
 bnds10k = get_empirical_bounds(nn, z, n_inputs=10000)

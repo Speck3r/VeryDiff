@@ -1,4 +1,9 @@
 
+# This script demonstrates the use of Chebyshev polynomials to approximate a function that is infinitely differentiable (in our example, the sigmoid function).
+# We will also compare the approximation error of the sigmoid function with the ReLU function.
+# Note that the approximation error for the sigmoid function is rapidly decreasing (compared to the very slow convergence for ReLU).
+
+
 using VeryDiff, Plots
 
 l = -5.
@@ -43,3 +48,19 @@ plot(degrees, diffs, yscale=:log, label="approx error")
 plot!(degrees, err_bound.(degrees, ν=1, V=V), label="ν=1")
 plot!(degrees[2:end], err_bound.(degrees[2:end], ν=2, V=V), label="ν=2")
 plot!(degrees[3:end], err_bound.(degrees[3:end], ν=3, V=V), label="ν=3")
+
+
+degrees = 1:100
+diffs_relu = []
+diffs_sigmoid = []
+for degree in degrees
+    fc = VeryDiff.make_eval_chebyshev(f, l, u, degree)
+    diff_sigmoid = approx_diff(f, fc, l, u)
+    push!(diffs_sigmoid, diff_sigmoid)
+    fc = VeryDiff.make_eval_chebyshev(x -> max(0, x), l, u, degree)
+    diff_relu = approx_diff(x -> max(0, x), fc, l, u)
+    push!(diffs_relu, diff_relu)
+end
+
+plot(degrees, diffs_sigmoid, yscale=:log, label="err sigmoid", xlabel="degree", ylabel="error")
+plot!(degrees, diffs_relu, label="err relu")

@@ -150,11 +150,15 @@ y_test = [[x for x in f_mnist[i]][1] for i in 1:size(f_mnist, 1)]
 model_file = string(@__DIR__, "/../test/examples/networks/mnist-net_256x4.onnx")
 net = VNNLib.load_network(model_file)
 
+bnds_mnist = get_empirical_bounds(net, X_test);
+
 ŷ = [net(x) for x in X_test]
 ŷ = hcat(ŷ...)'
 acc_fun(y_test .+ 1, ŷ)
 
 z = Zonotope(I(784) .* 0.5, zeros(784) .+ 0.5, I(784))
+
+z_out = net(z, PropState(true));
 
 println("===== MNIST 4x256 Iterative =====")
 maes = []
@@ -177,10 +181,6 @@ jldsave(string("mnist_4x256_zono_polys_data_", now(), ".jld2"); nets, maes, mses
 model_file = string(@__DIR__, "/networks/mnist_256x4_2e5.onnx")
 net = VNNLib.load_network(model_file)
 
-ŷ = [net(x) for x in X_test]
-ŷ = hcat(ŷ...)'
-acc_fun(y_test .+ 1, ŷ)
-
 z = Zonotope(I(784) .* 0.5, zeros(784) .+ 0.5, I(784))
 
 println("===== MNIST L1 4x256 Iterative =====")
@@ -200,6 +200,34 @@ for degree in (1:9) ∪ (10:10:200)
 end
 
 jldsave(string("mnist_4x256_2e5_zono_polys_data_", now(), ".jld2"); nets_l1, maes_l1, mses_l1, accs_l1, times_l1)
+
+
+model_file = string(@__DIR__, "/networks/mnist_256x4_1e4.onnx")
+net = VNNLib.load_network(model_file)
+
+ŷ = [net(x) for x in X_test]
+ŷ = hcat(ŷ...)'
+acc_fun(y_test .+ 1, ŷ)
+
+z = Zonotope(I(784) .* 0.5, zeros(784) .+ 0.5, I(784))
+
+println("===== MNIST L1 1e4 4x256 Iterative =====")
+maes_l1_1e4 = []
+mses_l1_1e4 = []
+accs_l1_1e4 = []
+times_l1_1e4 = []
+nets_l1_1e4 = []
+for degree in (1:9) ∪ (10:10:200)
+    t = @elapsed nn_poly, mae, mse, acc = generate_poly_network(net, z, degree, X_test=X_test, y_test=ŷ, y_labels=y_test, empirical=false, verbosity=1, max_iter=20)
+    println("degree = ", degree, " mae = ", mae, " mse = ", mse, " acc = ", acc, " (", t, "s)")
+    push!(maes_l1_1e4, mae)
+    push!(mses_l1_1e4, mse) 
+    push!(accs_l1_1e4, acc)
+    push!(times_l1_1e4, t)
+    push!(nets_l1_1e4, nn_poly)
+end
+
+jldsave(string("mnist_4x256_1e4_zono_polys_data_", now(), ".jld2"); nets_l1_1e4, maes_l1_1e4, mses_l1_1e4, accs_l1_1e4, times_l1_1e4)
 
 
 
@@ -320,8 +348,121 @@ for degree in 1:100
 end
 
 
+
 #################################
 ### Verified Equivalence      ###
 #################################
 
+degrees = (1:9) ∪ (10:10:200)
 
+res = load("./mnist_4x256_1e4_zono_polys_data_2025-03-27T17:39:57.751.jld2")
+nets_l1_1e4 = res["nets_l1_1e4"];
+maes_l1_1e4 = res["maes_l1_1e4"];
+
+#model_file = string(@__DIR__, "/networks/mnist_256x4_2e5.onnx")
+model_file = string(@__DIR__, "/networks/mnist_256x4_1e4.onnx")
+nn = VNNLib.load_network(model_file)
+
+VeryDiff.OPTIM_ITERS[] = 0
+prop_state = PropState(true)
+∂bounds = []
+for (i, nn_poly) in enumerate(nets_l1_1e4)
+    #ẑ_poly = nn_poly(z, prop_state)
+    #bounds_poly = zono_bounds(ẑ_poly)
+    #println("\nlbs = ", bounds_poly[:,1])
+    #println("ubs = ", bounds_poly[:,2])
+
+    # propagate differential zonotope through the difference network
+    nn_diff = GeminiNetwork(nn_poly, nn);
+
+    # need to convert to matrix, s.t. z and ∂z have the same type
+    z = Zonotope(Matrix(I(784)) .* 0.5, zeros(784) .+ 0.5, I(784))
+    ∂z = Zonotope(zeros(784, 784), zeros(784), nothing)
+    zΔ = DiffZonotope(z, deepcopy(z), ∂z, 0, 0, 0)
+    #@profile ẑΔ = nn_diff(zΔ, PropState(true))
+    ẑΔ = nn_diff(zΔ, PropState(true))
+
+    bounds_diff = zono_bounds(ẑΔ.∂Z)
+    ∂bound = maximum(abs.(bounds_diff))
+    println("\ndegree = ", degrees[i], " ∂bound = ", ∂bound)
+    println("\tlbs = ", bounds_diff[:,1])
+    println("\tubs = ", bounds_diff[:,2])
+    println("")
+    push!(∂bounds, ∂bound)
+end
+
+
+#plot(degrees, ∂bounds, label="∂bounds L1", marker=:diamond, xlabel="degree", ylabel="difference", yaxis=:log, title="MNIST 4x256 L1 - Verified Difference")
+#plot!(degrees, maes_l1, label="maes L1", marker=:utriangle, linestyle=:dash)
+
+plot(degrees, ∂bounds, label="∂bounds L1", marker=:diamond, xlabel="degree", ylabel="difference", yaxis=:log, title="MNIST 4x256 L1 1e-4 - Verified Difference")
+plot!(degrees, maes_l1_1e4, label="maes L1", marker=:utriangle, linestyle=:dash)
+
+
+bnds_1e4 = get_empirical_bounds(nn, X_test);
+
+
+
+y = [nn(x) for x in X_test]
+y = hcat(y...)'
+ŷ = [nn_poly(x) for x in X_test]
+ŷ = hcat(ŷ...)';
+
+d = ∂bounds[end] .* ones(length(y[1,:]))
+max_idx = argmax(y[1,:])
+d = ifelse.(1:length(y[1,:]) .== max_idx, .-d, d)
+
+
+
+
+
+
+
+
+# This doesn't work right now because of some NaNs :-(
+
+# Why do I have to write this??? I thought it turns off automatically 
+# at Initialization if Gurobi is not available
+VeryDiff.USE_GUROBI = false
+
+#nn_poly = nets_l1[end]
+nn_poly = nets_l1_1e4[end]
+property_check = get_top1_property(naive=false, delta=0.9)
+split_heuristic = top1_configure_split_heuristic(1)
+verify_network(nn_poly, nn, [zeros(784) ones(784)], property_check, split_heuristic; timeout=600)
+
+
+## debugging
+nn_poly = nets_l1[end]
+nn_diff = GeminiNetwork(nn_poly, nn);
+
+# need to convert to matrix, s.t. z and ∂z have the same type
+z = Zonotope(Matrix(I(784)) .* 0.5, zeros(784) .+ 0.5, I(784))
+∂z = Zonotope(zeros(784, 784), zeros(784), nothing)
+zΔ = DiffZonotope(z, deepcopy(z), ∂z, 0, 0, 0)
+#@profile ẑΔ = nn_diff(zΔ, PropState(true))
+ẑΔ = nn_diff(zΔ, PropState(true))
+
+# during porpagation of the differential zonotope, we get max_errors of 
+# 0.011874595973571545
+# 0.08377719067152946
+# 0.48085414516227853
+# 0.8577763650704332
+#
+# but during construction, we get errors of 
+# 0.011874595973621282
+# 0.03614989671659785
+# 0.11536441284661691
+# 
+# 
+# which only match for the initial layer and are much smaller for the later layers!
+
+
+bounds_diff = zono_bounds(ẑΔ.∂Z)
+
+t = @elapsed nn_poly, mae, mse, acc = generate_poly_network(nn, z, 200, X_test=X_test, y_test=ŷ, y_labels=y_test, empirical=false, verbosity=1, max_iter=20)
+
+
+
+
+res_2e5 = load("./mnist_4x256_2e5_zono_polys_data_2025-03-27T17:39:57.751.jld2");

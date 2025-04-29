@@ -5,7 +5,7 @@ using TimerOutputs
 using JuMP
 #using GLPK
 using Gurobi
-import VeryDiff: Poly, PolyReLU
+import VeryDiff: Poly, PolyReLU, approximate_polynomial_iterative
 
 Random.seed!(1234);
 VeryDiff.NEW_HEURISTIC = false
@@ -63,10 +63,14 @@ function construct_maxvio_model(Z, x_in, y1, y2; bound_max_vio=false, model=noth
     @variable(model, -1 <= lp_x[1:size(∂Z.G,2)] <= 1)
     @variable(model, v[1:(size(∂Z.G, 1) + size(Z₁.G, 1) + size(Z₂.G, 1))])
     @variable(model, v_max)
+    # input generators are set as in x_in
     @constraint(model, lp_x[1:input_dim] .== x_in)
+    # ∂Z(x_in) - (y1 - y2) = violation  if everything is correct there should be no violation
     @constraint(model, ∂Z.G*lp_x .+ ∂Z.c .- (y1 .- y2) .== v[1:size(∂Z.G, 1)])
+    # Z₁(x_in) - y1 = violation  (we also want the output of the first network to be correct)
     @constraint(model, Z₁.G*lp_x[1:size(Z₁.G,2)] .+ Z₁.c .- y1 .== v[(size(∂Z.G, 1)+1):(size(∂Z.G, 1) + size(Z₁.G, 1))])
     offset = size(Z₁.G,2)+1
+    # Z₂(x_in) - y2 = violation  (we also want the output of the second network to be correct)
     @constraint(model, 
         Z₂.G[:,1:input_dim]*lp_x[1:input_dim] .+
         Z₂.G[:,input_dim+1:end]*lp_x[offset:offset+Z.num_approx₂-1] .+
@@ -88,6 +92,7 @@ end
 @timeit VeryDiff.to "Fuzzing" begin
 NET_COUNT = 0
 error_net = nothing
+error_z   = nothing
 while true
     global NET_COUNT
     next_seed = rand(1:9999)
@@ -107,7 +112,8 @@ while true
         if i==n
             new_dim = output_dim
         else
-            new_dim = rand(50:100)
+            #new_dim = rand(50:100)
+            new_dim = rand(2:10)
         end
         W1 = randn(Float64,(new_dim,cur_dim))
         b1 = randn(Float64,new_dim)
@@ -144,14 +150,15 @@ while true
         N1 = Network(deepcopy(layers1))
         N2 = Network(deepcopy(layers2))
         #push!(networks,(N1,N2,new_dim))
-        degree = rand(2:5)
+        #degree = rand(2:5)
+        degree = rand(10:20)
 
         # TODO: nice polynomial networks 
         push!(layers1, ReLU())
         N1 = Network(deepcopy(layers1))
         # just use 5 as the width (the largest width below is 4 plus the offset can by anything in [0, 1])
-        z = Zonotope(Matrix(5*I,input_dim,input_dim),zeros(input_dim),nothing)
-        N1 = approximate_polynomial_iterative(N1, z, degree)
+        z = Zonotope(Matrix(5. *I, input_dim, input_dim),zeros(input_dim),nothing)
+        N1 = approximate_polynomial_iterative(N1, z, degree, verbosity=1)
 
 
         #coeff1 = rand(Float64,(new_dim,degree+1))
@@ -165,6 +172,11 @@ while true
     for (N1,N2,output_dim) in networks
         println("----")
         N = GeminiNetwork(N1,N2)
+
+        # doesn't hurt to directly save error_net here, 
+        # just in case something crashes before sending inputs through the network.
+        error_net = N
+
         range = rand([0.1,4])
         offset = rand(input_dim)
         Z_original1 = Zonotope(Matrix(range*I,input_dim,input_dim),offset,nothing)
@@ -172,6 +184,9 @@ while true
         Z_original2 = deepcopy(Z_original1)
         ∂Z_original = Zonotope(Matrix(0.0I,input_dim,input_dim),zeros(Float64,input_dim),nothing)
         Z = DiffZonotope(Z_original1,Z_original2,∂Z_original,0,0,0)
+
+        error_z = Z
+
         prop_state = PropState(true)
         @timeit VeryDiff.to "NetworkProp" Z = N(Z, prop_state)
         bounds1 = Tuple{Float64,Float64}[]
@@ -214,9 +229,13 @@ while true
 
                 error = true
             elseif objective_value(model) > 0
-                println("Optimal Solution: ", objective_value(model))
                 error_net = N 
-                error = true 
+                if objective_value(model) < threshold
+                    @warn "Violation was: $(objective_value(model)) (but smaller than threshold $(threshold))"
+                else
+                    println("Optimal Solution: ", objective_value(model))
+                    error = true 
+                end
             end
             # println("Solver Status: ", termination_status(model))
 

@@ -40,6 +40,7 @@ using Gurobi
 
 const GRB_ENV = Ref{Any}(nothing)
 
+include("OnnxPreprocessing.jl")
 include("Debugger.jl")
 include("Definitions.jl")
 include("Util.jl")

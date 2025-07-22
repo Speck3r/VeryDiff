@@ -1,7 +1,6 @@
 
 using ArgParse
 using VNNLib
-import VNNLib.NNLoader: load_network
 
 function parse_commandline(cmd_args)
     s = ArgParseSettings()
@@ -45,7 +44,8 @@ function run_cmd(args)
         return 1
     end
     try
-        net1 = load_network(net1)
+        net1 = load_onnx_model(net1)
+        net1 = preprocess_onnx_model(net1)
     catch
         error("Failed to parse network: $net1")
         return 1
@@ -56,7 +56,8 @@ function run_cmd(args)
         return 1
     end
     try
-        net2 = load_network(net2)
+        net2 = load_onnx_model(net2)
+        net2 = preprocess_onnx_model(net2)
     catch
         error("Failed to parse network: $net2")
         return 1

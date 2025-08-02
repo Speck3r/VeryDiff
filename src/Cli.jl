@@ -1,6 +1,7 @@
 
 using ArgParse
-using VNNLib
+using VNNLib: OnnxType, OnnxNet, set_onnx_verbosity, set_double_precision, get_input_names, get_output_names, compute_all_outputs, compute_outputs, compute_output, load_onnx_model
+using VNNLib: get_ast, iterate, AST, ast_to_lp
 
 function parse_commandline(cmd_args)
     s = ArgParseSettings()
@@ -139,8 +140,9 @@ function run_cmd(args)
                 break
             end
         end
-    catch
+    catch e
         println("Caught an exception, aborting")
+        println(e)
         result = UNKNOWN
     end
     if result == SAFE

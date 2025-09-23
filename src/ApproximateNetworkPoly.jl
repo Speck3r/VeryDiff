@@ -27,14 +27,19 @@ function get_zono_bounds(net::Network, input_set::Zonotope)
 end
 
 
-function approximate_polynomial(L::Dense, bounds, degree; cheby=true, verbosity=0, max_iter=20)
+function approximate_polynomial(L::Dense, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     # nothing to do here
     return L    
 end
 
-function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verbosity=0, max_iter=20)
+function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     lower = @view bounds[:,1]
     upper = @view bounds[:,2]
+
+    if max_polys_per_layer == 1
+        lower = [minimum(lower)]
+        upper = [maximum(upper)]
+    end
 
     res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
     ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
@@ -45,28 +50,53 @@ function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verb
 
     #verbosity > 0 && println("max error = ", maximum(ϵs))
 
+    if max_polys_per_layer == 1
+        # repeat the single polynomial for all neurons
+        # (needed in current implementation of ChebyshevPoly for correct evaluation)
+        ps = repeat(ps[1:1, :], size(bounds, 1), 1)
+        lower = @view bounds[:,1]
+        upper = @view bounds[:,2]
+    end
 
     layer = cheby ? ChebyshevPoly(Matrix(ps), lower, upper) : MonomialPoly(Matrix(ps))
     return layer
 end
 
 
-function approximate_polynomial(L::Poly, bounds, degree; cheby=true, verbosity=0, max_iter=20)
+function approximate_polynomial(L::Poly, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     @warn "skipping already polynomial layer (but degree might differ!/Cheby vs. Monomial Form might not match!)"
     return L    
 end
 
 
-function approximate_polynomial(net::Network, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20)
+function approximate_polynomial(net::Network, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     # attention: bounds are bounds AFTER the layer
     # for ReLU layers, we need the bound after the linear layer before that, the linear layers don't need any bounds
     bounds = [[[]]; bounds[1:end-1]]
-    layers = map(x -> approximate_polynomial(x[1], x[2], degree, cheby=cheby, verbosity=verbosity), zip(net.layers, bounds))
+    layers = map(x -> approximate_polynomial(x[1], x[2], degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer),
+                 zip(net.layers, bounds))
     return Network(layers)
 end
 
 
-function approximate_polynomial_iterative(net, input_set, degree; verbosity=0, cheby=true, max_iter=20)
+"""
+Iteratively approximate each layer in the network by a polynomial of a given degree.
+
+The input ranges for the approximation are verified bounds computed by zonotope propagation.
+
+args:
+    net - Network to approximate 
+    input_set - input set for which to get bounds 
+    degree - degree of polynomial approximation for ReLU layers
+
+kwargs:
+    verbosity - verbosity level (0: silent, 1: print first 5 lower and upper bounds)
+    cheby - whether to use Chebyshev basis (true) or Monomial basis (false) for polynomial approximation
+    max_iter - maximum number of iterations for Remez algorithm
+    max_polys_per_layer - maximum number of different polynomials to use per layer
+"""
+function approximate_polynomial_iterative(net, input_set, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf)
+    @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
     prop_state = PropState(true)
     layers_poly = []
     ẑ = input_set
@@ -80,7 +110,7 @@ function approximate_polynomial_iterative(net, input_set, degree; verbosity=0, c
         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
 
         layer = net.layers[i]
-        layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter)
+        layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
         push!(layers_poly, layer_poly)
 
         ẑ = layer_poly(ẑ, prop_state)

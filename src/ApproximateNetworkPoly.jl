@@ -54,8 +54,8 @@ function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verb
         # repeat the single polynomial for all neurons
         # (needed in current implementation of ChebyshevPoly for correct evaluation)
         ps = repeat(ps[1:1, :], size(bounds, 1), 1)
-        lower = @view bounds[:,1]
-        upper = @view bounds[:,2]
+        lower = repeat(lower[1:1], size(bounds, 1))
+        upper = repeat(upper[1:1], size(bounds, 1))
     end
 
     layer = cheby ? ChebyshevPoly(Matrix(ps), lower, upper) : MonomialPoly(Matrix(ps))

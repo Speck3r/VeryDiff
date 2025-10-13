@@ -42,15 +42,18 @@ const ALMOST_ZERO_LEADING_COEFF_WARNING = Ref{Bool}(true)
 function __init__()
     BLAS.set_num_threads(1)
     try
-        GRB_ENV[] = Gurobi.Env()
-        GRBsetintparam(GRB_ENV[], "OutputFlag", 0)
-        GRBsetintparam(GRB_ENV[], "LogToConsole", 0)
-        GRBsetintparam(GRB_ENV[], "Threads", 0)
-        #GRBsetintparam(GRB_ENV[], "Method", 2)
-        #       mnist_19_local_21.vnnlib        mnist_18_local_18
-        #0 :    0.018826400587219343s/loop      0.03304489948205128s/loop
-        #1 :    0.01705984154058722s/loop       0.03352098044717949s/loop
-        #2 :    0.020955224224525042s/loop      0.038390683782564106s/loop
+        # this might not be necessary, if USE_GUROBI is settable
+        if USE_GUROBI
+            GRB_ENV[] = Gurobi.Env()
+            GRBsetintparam(GRB_ENV[], "OutputFlag", 0)
+            GRBsetintparam(GRB_ENV[], "LogToConsole", 0)
+            GRBsetintparam(GRB_ENV[], "Threads", 0)
+            #GRBsetintparam(GRB_ENV[], "Method", 2)
+            #       mnist_19_local_21.vnnlib        mnist_18_local_18
+            #0 :    0.018826400587219343s/loop      0.03304489948205128s/loop
+            #1 :    0.01705984154058722s/loop       0.03352098044717949s/loop
+            #2 :    0.020955224224525042s/loop      0.038390683782564106s/loop
+        end
     catch e 
         println("Gurobi error: ", e)
         println("!!! falling back to GLPK !!!")
@@ -85,6 +88,9 @@ include("Properties.jl")
 include("Verifier.jl")
 include("ApproximateNetworkPoly.jl")
 
+# command line interface
+include("Cli.jl")
+
 export Network,GeminiNetwork,Layer,Dense,ReLU,WrappedReLU
 export parse_network
 export Zonotope, DiffZonotope, PropState
@@ -93,4 +99,4 @@ export verify_network
 export get_epsilon_property, epsilon_split_heuristic, get_epsilon_property_naive
 export get_top1_property, top1_configure_split_heuristic
 
-end # module AlphaZono
+end

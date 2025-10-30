@@ -1,8 +1,5 @@
-import VNNLib.NNLoader.Network
-import VNNLib.NNLoader.Dense
-import VNNLib.NNLoader.ReLU
 
-function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
+function propagate_diff_layer(Ls :: Tuple{OXP.ONNXLinear,OXP.ONNXLinear,OXP.ONNXLinear}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
     #println("Prop dense")
     return @timeit to "DiffZonotope_DenseProp" begin
     #println("Dense")
@@ -48,7 +45,7 @@ function two_generator_bound(G::AbstractMatrix, b, H::AbstractMatrix)
     return [sum(j->abs(G[i,j]+b*H[i,j]),1:size(G,2)) for i in 1:size(G,1)]
 end
 
-function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
+function propagate_diff_layer(Ls :: Tuple{OXP.ONNXRelu,OXP.ONNXRelu,OXP.ONNXRelu}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
     #println("Prop relu")
     return @timeit to "DiffZonotope_ReLUProp" begin
     #println("ReLU")
@@ -392,7 +389,7 @@ function poly_initial_slope_guess(l₁, u₁, l₂, u₂, ∂l, ∂u)
 end
 
 
-function find_good_poly_diff_approx(L::MonomialPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=0, b=0)
+function find_good_poly_diff_approx(L::ONNXMonomialPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=0, b=0)
     options = Optim.Options(iterations=OPTIM_ITERS[], show_trace=true)
     find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], 
                                 ∂lower[selector], ∂upper[selector], 
@@ -401,7 +398,7 @@ function find_good_poly_diff_approx(L::MonomialPoly, selector::AbstractVector, l
 end
 
 
-function find_good_poly_diff_approx(L::ChebyshevPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=zero(lower₁), b=zero(lower₂))
+function find_good_poly_diff_approx(L::ONNXChebyshevPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=zero(lower₁), b=zero(lower₂))
     # TODO: can't have a=0, b=0 as initialization if we use a[...] later on
     options = Optim.Options(iterations=OPTIM_ITERS[])
     find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], 
@@ -423,7 +420,7 @@ args:
 returns:
     α, β, γ - s.t. α*x + β - γ ≤ p(x) - x ≤ α*x + β + γ
 """
-function poly_pos_approx(L::ChebyshevPoly, selector::AbstractVector, lower₁, upper₁)
+function poly_pos_approx(L::ONNXChebyshevPoly, selector::AbstractVector, lower₁, upper₁)
     # compute chebyshev representation of -x for the same approximation domain as the given polynomials.
     # since -x is linear, we only need the first two coefficients and can thus always just use degree 1.
     id_neg = (l, u) -> VeryDiff.chebyshev_coefficients(x -> -x, l, u, 1)
@@ -437,7 +434,7 @@ end
 
 
 
-function propagate_diff_layer(Ls :: Tuple{Poly,DiffLayer{<:Poly,ReLU},ReLU}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {N,GN,CN}
+function propagate_diff_layer(Ls :: Tuple{ONNXPoly,ONNXDiffNode{S,<:ONNXPoly,OXP.ONNXRelu},OXP.ONNXRelu}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {S,N,GN,CN}
     return @timeit to "DiffZonotope_PolyReLUProp" begin
         L1, LΔ, L2 = Ls
         Debugger.@pre_diffzono_prop_hook Z context="Pre PolyReLU"

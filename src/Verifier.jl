@@ -3,8 +3,8 @@
 @enum VerificationStatus UNKNOWN SAFE UNSAFE
 
 function verify_network(
-    N1 :: Network,
-    N2 :: Network,
+    N1 :: LayeredModel,
+    N2 :: LayeredModel,
     bounds,
     property_check,
     split_heuristic;

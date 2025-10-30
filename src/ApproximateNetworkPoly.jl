@@ -10,13 +10,13 @@ returns:
     bounds - list of (n_neurons x 2)-array for each layer holding lower and upper bounds for each neuron 
              after that layer was applied
 """
-function get_zono_bounds(net::Network, input_set::Zonotope)
+function get_zono_bounds(net::LayeredModel, input_set::Zonotope)
     bounds = []
     
     prop_state = PropState(true)
     for i in 1:length(net.layers)
         layers = net.layers[1:i]
-        net_partial = Network(layers)
+        net_partial = LayeredModel(layers)
 
         ẑ = net_partial(input_set, prop_state)
         bounds_layer = zono_bounds(ẑ)
@@ -27,12 +27,12 @@ function get_zono_bounds(net::Network, input_set::Zonotope)
 end
 
 
-function approximate_polynomial(L::Dense, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXLinear, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     # nothing to do here
     return L    
 end
 
-function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     lower = @view bounds[:,1]
     upper = @view bounds[:,2]
 
@@ -58,24 +58,26 @@ function approximate_polynomial(L::VNNLib.ReLU, bounds, degree; cheby=true, verb
         upper = repeat(upper[1:1], size(bounds, 1))
     end
 
-    layer = cheby ? ChebyshevPoly(Matrix(ps), lower, upper) : MonomialPoly(Matrix(ps))
+    # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.
+    # Therefore, we reuse the same node names.
+    layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
     return layer
 end
 
 
-function approximate_polynomial(L::Poly, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::ONNXPoly, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     @warn "skipping already polynomial layer (but degree might differ!/Cheby vs. Monomial Form might not match!)"
     return L    
 end
 
 
-function approximate_polynomial(net::Network, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(net::LayeredModel, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     # attention: bounds are bounds AFTER the layer
     # for ReLU layers, we need the bound after the linear layer before that, the linear layers don't need any bounds
     bounds = [[[]]; bounds[1:end-1]]
     layers = map(x -> approximate_polynomial(x[1], x[2], degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer),
                  zip(net.layers, bounds))
-    return Network(layers)
+    return LayeredModel(layers)
 end
 
 
@@ -116,5 +118,5 @@ function approximate_polynomial_iterative(net, input_set, degree; verbosity=0, c
         ẑ = layer_poly(ẑ, prop_state)
     end
 
-    return Network(layers_poly)   
+    return LayeredModel(layers_poly)   
 end

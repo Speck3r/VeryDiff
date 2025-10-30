@@ -1,19 +1,16 @@
-import VNNLib.NNLoader.Network
-import VNNLib.NNLoader.Dense
-import VNNLib.NNLoader.ReLU
 
-function (N::Network)(Z :: Zonotope, P :: PropState)
+function (N::LayeredModel)(Z :: Zonotope, P :: PropState)
     return foldl((Z,L) -> L(Z,P),N.layers,init=Z)
 end
 
-function (N::Network)(Z::Zonotope, P::PropState, bounds::AbstractVector)
+function (N::LayeredModel)(Z::Zonotope, P::PropState, bounds::AbstractVector)
     foldl((Z,t) -> t[1](Z,P,bounds=t[2]), zip(N.layers, bounds), init=Z)
 end
 
-function (L::Dense)(Z :: Zonotope,P :: PropState; bounds=nothing)
+function (L::OXP.ONNXLinear)(Z :: Zonotope,P :: PropState; bounds=nothing)
     return @timeit to "Zonotope_DenseProp" begin
-    G = L.W * Z.G
-    c = L.W * Z.c .+ L.b
+    G = L.dense.weight * Z.G
+    c = L.dense.weight * Z.c .+ L.dense.bias
     return Zonotope(G,c, Z.influence)
     end
 end
@@ -28,7 +25,7 @@ function get_slope(l,u, alpha)
     end
 end
 
-function (L::ReLU)(Z :: Zonotope{N,GN,CN}, P :: PropState; bounds = nothing) where {N,GN,CN}
+function (L::OXP.ONNXRelu)(Z :: Zonotope{N,GN,CN}, P :: PropState; bounds = nothing) where {N,GN,CN}
     return @timeit to "Zonotope_ReLUProp" begin
     @timeit to "Bounds" begin
     row_count = size(Z.G,1)
@@ -141,12 +138,12 @@ function get_linear_relaxation_cheby(cs::AbstractArray, l_fit::AbstractVector, u
 end
 
 
-function get_linear_relaxation(L::ChebyshevPoly, lower, upper)
+function get_linear_relaxation(L::ONNXChebyshevPoly, lower, upper)
     get_linear_relaxation_cheby(L.coeffs, L.l, L.u, lower, upper)
 end
 
 
-function get_linear_relaxation(L::MonomialPoly, lower, upper)
+function get_linear_relaxation(L::ONNXMonomialPoly, lower, upper)
     row_count = length(lower)
     nonlinmask = .~islinear.(eachrow(L.coeffs))
     λ = copy(L.coeffs[:,2])
@@ -163,7 +160,7 @@ function get_linear_relaxation(L::MonomialPoly, lower, upper)
 end
 
 
-function (L::Poly)(Z::Zonotope{N,GN,CN}, P::PropState; bounds=nothing) where {N,GN,CN}
+function (L::ONNXPoly)(Z::Zonotope{N,GN,CN}, P::PropState; bounds=nothing) where {N,GN,CN}
     return @timeit to "Zonotope_PolyProp" begin
         @timeit to "Bounds" begin
             row_count = size(Z.G, 1)

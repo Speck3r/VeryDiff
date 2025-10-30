@@ -9,8 +9,8 @@ function propagate_diff_layer(Ls :: Tuple{OXP.ONNXLinear,OXP.ONNXLinear,OXP.ONNX
     Debugger.@diff_layer_inspection_hook Ls
 
     if USE_DIFFZONO
-        ∂G = GN(undef, size(L1.W,1), size(Z.∂Z.G,2))
-        mul!(∂G, L1.W, Z.∂Z.G)
+        ∂G = GN(undef, size(L1.dense.weight,1), size(Z.∂Z.G,2))
+        mul!(∂G, L1.dense.weight, Z.∂Z.G)
         #∂G = L1.W*Z.∂Z.G
         input_dim = size(Z.Z₂,2)-Z.num_approx₂
         # accessed_range = 1:input_dim
@@ -19,17 +19,17 @@ function propagate_diff_layer(Ls :: Tuple{OXP.ONNXLinear,OXP.ONNXLinear,OXP.ONNX
         #     accessed_range = [accessed_range;approx_two_range:approx_two_range+Z.num_approx₂-1]
         # end
         #∂G[:,accessed_range] .+= ∂L.W*Z.Z₂.G
-        mul!((@view ∂G[:,1:input_dim]), ∂L.W, (@view Z.Z₂.G[:,1:input_dim]), 1.0, 1.0)
+        mul!((@view ∂G[:,1:input_dim]), ∂L.dense.weight, (@view Z.Z₂.G[:,1:input_dim]), 1.0, 1.0)
         if Z.num_approx₂ > 0
             range_start = input_dim + Z.num_approx₁ + 1
             range_end = input_dim + Z.num_approx₁ + Z.num_approx₂
-            mul!((@view ∂G[:,range_start:range_end]), ∂L.W, (@view Z.Z₂.G[:,(input_dim+1):end]), 1.0, 1.0)
+            mul!((@view ∂G[:,range_start:range_end]), ∂L.dense.weight, (@view Z.Z₂.G[:,(input_dim+1):end]), 1.0, 1.0)
         end
         #mul!((@view ∂G[:,accessed_range]), ∂L.W, Z.Z₂.G, 1.0, 1.0)
         #∂c = L1.W*Z.∂Z.c .+ ∂L.W * Z.Z₂.c .+ ∂L.b
-        ∂c = L1.W*Z.∂Z.c #.+ ∂L.W * Z.Z₂.c .+ ∂L.b
-        mul!(∂c, ∂L.W, Z.Z₂.c, 1.0, 1.0)
-        ∂c .+= ∂L.b
+        ∂c = L1.dense.weight*Z.∂Z.c #.+ ∂L.W * Z.Z₂.c .+ ∂L.b
+        mul!(∂c, ∂L.dense.weight, Z.Z₂.c, 1.0, 1.0)
+        ∂c .+= ∂L.dense.bias
         ∂Z_new = Zonotope(∂G,∂c,Z.∂Z.influence)
         diff_zono_new = DiffZonotope(L1(Z.Z₁,P),L2(Z.Z₂,P),∂Z_new,Z.num_approx₁,Z.num_approx₂,Z.∂num_approx)
     else
@@ -434,7 +434,7 @@ end
 
 
 
-function propagate_diff_layer(Ls :: Tuple{ONNXPoly,ONNXDiffNode{S,<:ONNXPoly,OXP.ONNXRelu},OXP.ONNXRelu}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {S,N,GN,CN}
+function propagate_diff_layer(Ls :: Tuple{<:ONNXPoly{S,N},ONNXDiffNode{S,<:ONNXPoly{S,N},OXP.ONNXRelu{S}},OXP.ONNXRelu{S}}, Z::DiffZonotope{N,GN,CN}, P::PropState; bounds_x=nothing, bounds_y=nothing) where {S,N,GN,CN}
     return @timeit to "DiffZonotope_PolyReLUProp" begin
         L1, LΔ, L2 = Ls
         Debugger.@pre_diffzono_prop_hook Z context="Pre PolyReLU"
@@ -560,7 +560,7 @@ function propagate_diff_layer(Ls :: Tuple{ONNXPoly,ONNXDiffNode{S,<:ONNXPoly,OXP
                     # while the range of p(x) - x is not much worse than the range of p(x)
 
                     # α*x + β - γ ≤ p(x) - x ≤ α*x + β + γ
-                    α, β, γ = poly_pos_approx(LΔ.layer1, selector, lower₁, upper₁)
+                    α, β, γ = poly_pos_approx(LΔ.node1, selector, lower₁, upper₁)
                    
                     # input generators: just α*Z₁ + ∂Z
                     Ĝ[selector, 1:input_dim] .= α .* (@view Z.Z₁.G[selector, 1:input_dim]) .+ (@view Z.∂Z.G[selector, 1:input_dim])
@@ -593,7 +593,7 @@ function propagate_diff_layer(Ls :: Tuple{ONNXPoly,ONNXDiffNode{S,<:ONNXPoly,OXP
                 a_init, b_init = poly_initial_slope_guess(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
 
                 # why is there no better way to handle broadcasted tuples?
-                res = find_good_poly_diff_approx(LΔ.layer1, selector, lower₁, upper₁, ∂lower, ∂upper, a_init, b_init)
+                res = find_good_poly_diff_approx(LΔ.node1, selector, lower₁, upper₁, ∂lower, ∂upper, a_init, b_init)
                 #res = find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], ∂lower[selector], ∂upper[selector], eachrow(LΔ.coeffs[selector,:]))
                 a = getindex.(res, 1)  # slope of x
                 b = getindex.(res, 2)  # slope of Δ 

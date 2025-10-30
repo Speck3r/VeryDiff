@@ -101,10 +101,10 @@ kwargs:
     max_iter - maximum number of iterations for Remez algorithm
     max_polys_per_layer - maximum number of different polynomials to use per layer
 """
-function approximate_polynomial_iterative(net, input_set, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial_iterative(net::LayeredModel{S}, input_set, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
     @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
     prop_state = PropState(true)
-    layers_poly = []
+    layers_poly = Vector{OXP.Node{S}}()
     ẑ = input_set
     for i in 1:length(net.layers)
         bounds_layer = zono_bounds(ẑ)

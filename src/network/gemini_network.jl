@@ -47,10 +47,7 @@ function get_difference_layer(node1::ONNXPoly{S}, node2::OXP.ONNXRelu{S}) where 
     ONNXDiffNode(node1, node2)
 end
 
-function to_gemini_network(model1::OnnxNet{S,N1,N2}, model2::OnnxNet{S,N1,N2}) where {S,N1,N2}
-    lmodel1 = to_layered_model(model1)
-    lmodel2 = to_layered_model(model2)
-
+function to_gemini_network(lmodel1::LayeredModel{S}, lmodel2::LayeredModel{S}) where S
     @assert length(lmodel1.layers) == length(lmodel2.layers) "Both networks should have the same number of layers!"
     layersΔ = Vector{OXP.Node{S}}()
     for (l1, l2) in zip(lmodel1.layers, lmodel2.layers)
@@ -59,6 +56,13 @@ function to_gemini_network(model1::OnnxNet{S,N1,N2}, model2::OnnxNet{S,N1,N2}) w
     end
 
     return (lmodel1, lmodel2, LayeredModel(layersΔ))
+end
+
+function to_gemini_network(model1::OnnxNet{S,N1,N2}, model2::OnnxNet{S,N1,N2}) where {S,N1,N2}
+    lmodel1 = to_layered_model(model1)
+    lmodel2 = to_layered_model(model2)
+
+    to_gemini_network(lmodel1, lmodel2)
 end
 
 
@@ -78,17 +82,23 @@ function cleanup_network(network1)
 end
 
 struct GeminiNetwork
-    network1 :: OnnxNet
-    network2 :: OnnxNet
-    diff_network :: OnnxNet
-    function GeminiNetwork(network1 :: OnnxNet, network2 :: OnnxNet)
-        if length(network1.layers) > length(network2.layers)
-            network1 = cleanup_network(network1)
-        elseif length(network2.layers) > length(network1.layers)
-            network2 = cleanup_network(network2)
+    network1 :: LayeredModel
+    network2 :: LayeredModel
+    diff_network :: LayeredModel
+    function GeminiNetwork(lmodel1::LayeredModel, lmodel2::LayeredModel)
+        if length(lmodel1.layers) > length(lmodel2.layers)
+            lmodel1 = cleanup_network(lmodel1)
+        elseif length(lmodel2.layers) > length(lmodel1.layers)
+            lmodel2 = cleanup_network(lmodel2)
         end
-        @assert length(network1.layers) == length(network2.layers)
-        nn1, nn2, nnΔ = to_gemini_network(network1, network2)
+        @assert length(lmodel1.layers) == length(lmodel2.layers)
+        nn1, nn2, nnΔ = to_gemini_network(lmodel1, lmodel2)
         return new(nn1, nn2, nnΔ)
     end
+end
+
+function GeminiNetwork(network1::OnnxNet, network2::OnnxNet)
+    lmodel1 = to_layered_model(network1)
+    lmodel2 = to_layered_model(network2)
+    GeminiNetwork(lmodel1, lmodel2)
 end

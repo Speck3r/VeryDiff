@@ -16,7 +16,7 @@ struct ONNXMonomialPoly{S,N<:Number} <: ONNXPoly{S,N}
     coeffs::Array{N}
 end
 
-onnx_node_to_flux_layer(node::ONNXMonomialPoly) = x -> begin
+OXP.onnx_node_to_flux_layer(node::ONNXMonomialPoly) = x -> begin
     n_neurons, n_coeffs = size(node.coeffs)
     degree = n_coeffs - 1
     vec(sum(node.coeffs .* x .^ collect(0:degree)', dims=2))
@@ -31,7 +31,7 @@ struct ONNXChebyshevPoly{S,N<:Number,VN<:AbstractVector{N}} <: ONNXPoly{S,N}
     u::VN 
 end
 
-onnx_node_to_flux_layer(node::ONNXChebyshevPoly) = x -> begin
+OXP.onnx_node_to_flux_layer(node::ONNXChebyshevPoly) = x -> begin
     clenshaw_chebyshev.(eachrow(node.coeffs), x, node.l, node.u)
 end
 
@@ -50,9 +50,9 @@ function ONNXDiffNode(node1::OXP.Node{S}, node2::OXP.Node{S}) where S
     ONNXDiffNode(inputs, outputs, name, node1, node2)
 end
 
-function onnx_node_to_flux_layer(node::ONNXDiffNode)
-    flux_layer1 = onnx_node_to_flux_layer(node.node1)
-    flux_layer2 = onnx_node_to_flux_layer(node.node2)
+function OXP.onnx_node_to_flux_layer(node::ONNXDiffNode)
+    flux_layer1 = OXP.onnx_node_to_flux_layer(node.node1)
+    flux_layer2 = OXP.onnx_node_to_flux_layer(node.node2)
 
     x -> begin
         y₁ = flux_layer1(x)

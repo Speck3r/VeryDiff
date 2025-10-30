@@ -13,16 +13,30 @@ function to_layered_model(onnx_model::OnnxNet{S,N1,N2}) where {S,N1,N2}
     @assert length(onnx_model.start_nodes) == 1 "Only single input models are supported! Got $(onnx_model.start_nodes)"
     node_name = onnx_model.start_nodes[1]
 
-    while haskey(onnx_model.node_nexts, node_name) && length(onnx_model.node_nexts[node_name]) > 0
+    while haskey(onnx_model.node_nexts, node_name)
         node = onnx_model.nodes[node_name]
-        push!(layers, node)
+
+        if node isa OXP.ONNXFlatten
+            # TODO: worry about flatten when we have convolutional networks
+            @warn "Skipping Flatten layer!"
+        else
+            push!(layers, node)
+        end
 
         next_nodes = onnx_model.node_nexts[node_name]
-        @assert length(next_nodes) == 1 "Only sequential models are supported! Got $(next_nodes)"
+        # 0 next nodes are also allowed for the output layer
+        @assert length(next_nodes) <= 1 "Only sequential models are supported! Got $(next_nodes)"
+        length(next_nodes) == 0 && break
         node_name = onnx_model.node_nexts[node_name][1]
     end
 
     return LayeredModel(layers)
+end
+
+
+function (model::LayeredModel)(x::AbstractArray)
+    # is creating a new flux layer every time efficient?
+    return foldl((x,L) -> OXP.onnx_node_to_flux_layer(L)(x), model.layers,init=x)
 end
 
 
@@ -38,7 +52,7 @@ returns:
 """
 function intermediate_activations(net::LayeredModel, x::AbstractVector)
     accfun = (L, xs) -> begin
-        f = onnx_node_to_flux_layer(L)
+        f = OXP.onnx_node_to_flux_layer(L)
         x = f(xs[end])
         push!(xs, x)
     end

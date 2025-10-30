@@ -15,6 +15,8 @@ using Optim
 using GLPK
 using Gurobi
 
+const OXP = VNNLib.OnnxParser
+
 NEW_HEURISTIC = true
 USE_GUROBI = true
 
@@ -73,10 +75,17 @@ using JuMP
 const GRB_ENV = Ref{Any}(nothing)
 
 include("Debugger.jl")
+
 include("chebyshev/Chebyshev.jl")
 include("chebyshev/chebyshev_interface.jl")
+
+include("network/ONNXNodes.jl")
+include("network/layered_network.jl")
+include("network/gemini_network.jl")
+include("network/load_polynomial_network.jl")
+
 include("Definitions.jl")
-include("Network.jl")
+# include("Network.jl")
 include("Util.jl")
 include("Zonotope.jl")
 include("Remez.jl")
@@ -92,7 +101,6 @@ include("ApproximateNetworkPoly.jl")
 include("Cli.jl")
 
 export Network,GeminiNetwork,Layer,Dense,ReLU,WrappedReLU
-export parse_network
 export Zonotope, DiffZonotope, PropState
 export zono_optimize, zono_bounds
 export verify_network

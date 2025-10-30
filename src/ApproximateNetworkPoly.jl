@@ -70,6 +70,10 @@ function approximate_polynomial(L::ONNXPoly, bounds, degree; cheby=true, verbosi
     return L    
 end
 
+function approximate_polynomial(L::OXP.ONNXFlatten, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+    return L    
+end
+
 
 function approximate_polynomial(net::LayeredModel, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     # attention: bounds are bounds AFTER the layer

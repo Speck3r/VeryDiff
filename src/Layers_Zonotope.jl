@@ -15,6 +15,12 @@ function (L::OXP.ONNXLinear)(Z :: Zonotope,P :: PropState; bounds=nothing)
     end
 end
 
+
+function (L::OXP.ONNXFlatten)(Z::Zonotope, P::PropState; bounds=nothing)
+    # TODO: care about this once we move to convolutional networks!
+    return Z 
+end
+
 function get_slope(l,u, alpha)
     if u <= 0
         return 0.0

@@ -5,7 +5,7 @@ using TimerOutputs
 using JuMP
 #using GLPK
 using Gurobi
-import VeryDiff: Poly, PolyReLU, approximate_polynomial_iterative
+import VeryDiff: Poly, approximate_polynomial_iterative
 
 Random.seed!(1234);
 VeryDiff.NEW_HEURISTIC = false

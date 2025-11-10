@@ -65,6 +65,40 @@ function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, ver
 end
 
 
+function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+    @assert cheby "Currently, we only allow approximation in Chebyshev coefficients for GeLU layers!"
+    @assert max_iter == 0 "Currently, we only allow Chebyshev approximation (max_iter = 0), no Remez algorithm! Got max_iter = $(max_iter)"
+    
+    lower = @view bounds[:,1]
+    upper = @view bounds[:,2]
+
+    if max_polys_per_layer == 1
+        lower = [minimum(lower)]
+        upper = [maximum(upper)]
+    end
+
+    gelu = x -> 0.5 * x * (1 + erf(x / sqrt(2)))
+    p = chebyshev_coefficients.(gelu, lower, upper, degree)
+    ps = hcat(p...)'
+
+    # we don't know the error yet (could use an overapproximation/just a sampled approximation of the error?)
+    verbosity > 0 && println("GeLU chebyshev approximation")
+
+    if max_polys_per_layer == 1
+        # repeat the single polynomial for all neurons
+        # (needed in current implementation of ChebyshevPoly for correct evaluation)
+        ps = repeat(ps[1:1, :], size(bounds, 1), 1)
+        lower = repeat(lower[1:1], size(bounds, 1))
+        upper = repeat(upper[1:1], size(bounds, 1))
+    end
+
+    # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.
+    # Therefore, we reuse the same node names.
+    layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
+    return layer
+end
+
+
 function approximate_polynomial(L::ONNXPoly, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     @warn "skipping already polynomial layer (but degree might differ!/Cheby vs. Monomial Form might not match!)"
     return L    

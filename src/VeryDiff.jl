@@ -11,6 +11,7 @@ using VNNLib
 using CSV
 using PolynomialRoots
 using Optim
+using JLD2
 
 using GLPK
 using Gurobi
@@ -88,6 +89,10 @@ include("Definitions.jl")
 # include("Network.jl")
 include("Util.jl")
 include("Zonotope.jl")
+include("PiecewisePolynomials.jl")
+
+const GELU_PP = load_piecewise_poly(joinpath(@__DIR__, "..", "resources", "gelu_piecewise_poly_sampled_degree_15.jld2"))
+
 include("Remez.jl")
 include("PolynomialDifferenceRelaxation.jl")
 include("Layers_Zonotope.jl")

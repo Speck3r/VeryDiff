@@ -650,3 +650,11 @@ function approx_relu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10)
 
     return p, ϵ
 end
+
+
+function approx_gelu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10), max_iter=10, plotting=false, cheby=true) where N<:Number
+    @assert cheby "GeLU Remez approximation is only defined for Chebyshev basis."
+    f_gpp = make_eval_gelu_piecewise_poly(GELU_PP)
+    errfun = (p, l, u) -> piecewise_poly_error(GELU_PP, p, l, u)
+    p, ϵ = remez(f_gpp, errfun, poly_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=cheby)
+end

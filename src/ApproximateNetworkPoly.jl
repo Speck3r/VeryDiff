@@ -67,7 +67,6 @@ end
 
 function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     @assert cheby "Currently, we only allow approximation in Chebyshev coefficients for GeLU layers!"
-    @assert max_iter == 0 "Currently, we only allow Chebyshev approximation (max_iter = 0), no Remez algorithm! Got max_iter = $(max_iter)"
     
     lower = @view bounds[:,1]
     upper = @view bounds[:,2]
@@ -77,12 +76,21 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
         upper = [maximum(upper)]
     end
 
-    gelu = x -> 0.5 * x * (1 + erf(x / sqrt(2)))
-    p = chebyshev_coefficients.(gelu, lower, upper, degree)
-    ps = hcat(p...)'
+    if max_iter == 0
+        gelu = x -> 0.5 * x * (1 + erf(x / sqrt(2)))
+        p = chebyshev_coefficients.(gelu, lower, upper, degree)
+        ps = hcat(p...)'
 
-    # we don't know the error yet (could use an overapproximation/just a sampled approximation of the error?)
-    verbosity > 0 && println("GeLU chebyshev approximation")
+        # we don't know the error yet (could use an overapproximation/just a sampled approximation of the error?)
+        verbosity > 0 && println("GeLU chebyshev approximation")
+    else
+        res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
+        ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
+        ϵs = getindex.(res, 2)  # don't really need them, just for debugging 
+
+        max_idx = argmax(ϵs)
+        verbosity > 0 && println("max error = ", ϵs[max_idx], " at idx ", max_idx, " with bounds ", lower[max_idx], " ", upper[max_idx])
+    end
 
     if max_polys_per_layer == 1
         # repeat the single polynomial for all neurons

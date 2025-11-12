@@ -41,6 +41,9 @@ const OPTIM_ITERS = Ref{Int}(0)
 """print warning if leading coefficient of polynomial for which we want to compute roots is close to zero"""
 const ALMOST_ZERO_LEADING_COEFF_WARNING = Ref{Bool}(true)
 
+"""if leading coefficient of chebyshev polynomial has abs value smaller than this, we assume it is zero for roots computation"""
+const ROOTS_ALMOST_ZERO_TOL = Ref{Float64}(1e-15)
+
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()
     BLAS.set_num_threads(1)

@@ -2,14 +2,13 @@ import VNNLib.NNLoader.Network
 import VNNLib.NNLoader.Dense
 import VNNLib.NNLoader.ReLU
 
-function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope, P::PropState)
+function forward(L1 :: Dense, ∂L :: Dense, L2 :: Dense, Z::DiffZonotope, P::PropState) :: DiffZonotope
     #println("Prop dense")
     return @timeit to "DiffZonotope_DenseProp" begin
     #println("Dense")
-    L1, ∂L, L2 = Ls
 
-    Debugger.@pre_diffzono_prop_hook Z context="Pre Dense"
-    Debugger.@diff_layer_inspection_hook Ls
+    # Debugger.@pre_diffzono_prop_hook Z context="Pre Dense"
+    # Debugger.@diff_layer_inspection_hook (L1, ∂L, L2)
 
     if USE_DIFFZONO
         ∂G = Matrix{Float64}(undef, size(L1.W,1), size(Z.∂Z.G,2))
@@ -34,11 +33,11 @@ function propagate_diff_layer(Ls :: Tuple{Dense,Dense,Dense}, Z::DiffZonotope, P
         mul!(∂c, ∂L.W, Z.Z₂.c, 1.0, 1.0)
         ∂c .+= ∂L.b
         ∂Z_new = Zonotope(∂G,∂c,Z.∂Z.influence)
-        diff_zono_new = DiffZonotope(L1(Z.Z₁,P),L2(Z.Z₂,P),∂Z_new,Z.num_approx₁,Z.num_approx₂,Z.∂num_approx)
+        diff_zono_new = DiffZonotope(forward(L1, Z.Z₁,P),forward(L2, Z.Z₂,P),∂Z_new,Z.num_approx₁,Z.num_approx₂,Z.∂num_approx)
     else
-        diff_zono_new = DiffZonotope(L1(Z.Z₁,P),L2(Z.Z₂,P),Z.∂Z,Z.num_approx₁,Z.num_approx₂,Z.∂num_approx)
+        diff_zono_new = DiffZonotope(forward(L1, Z.Z₁,P),forward(L2, Z.Z₂,P),Z.∂Z,Z.num_approx₁,Z.num_approx₂,Z.∂num_approx)
     end
-    Debugger.@post_diffzono_prop_hook diff_zono_new context="Post Dense"
+    # Debugger.@post_diffzono_prop_hook diff_zono_new context="Post Dense"
     return diff_zono_new
     end
 end
@@ -48,13 +47,12 @@ function two_generator_bound(G::Matrix{Float64}, b, H::Matrix{Float64})
     return [sum(j->abs(G[i,j]+b*H[i,j]),1:size(G,2)) for i in 1:size(G,1)]
 end
 
-function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::PropState)
+function forward(L1 :: ReLU, Ld :: ReLU, L2 :: ReLU, Z::DiffZonotope, P::PropState) :: DiffZonotope
     #println("Prop relu")
     return @timeit to "DiffZonotope_ReLUProp" begin
     #println("ReLU")
-    L1, _, L2 = Ls
-    Debugger.@pre_diffzono_prop_hook Z context="Pre ReLU"
-    Debugger.@diff_layer_inspection_hook Ls
+    # Debugger.@pre_diffzono_prop_hook Z context="Pre ReLU"
+    # Debugger.@diff_layer_inspection_hook (L1, Ld, L2)
     input_dim = size(Z.Z₂,2)-Z.num_approx₂
 
     # Compute Bounds
@@ -100,8 +98,8 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
     upper₂ = @view bounds₂[:,2]
 
     # Compute Zonotopes for individual networks
-    Z₁_new = L1(Z.Z₁,P;bounds = bounds₁)
-    Z₂_new = L2(Z.Z₂,P;bounds = bounds₂)
+    Z₁_new = forward(L1, Z.Z₁,P;bounds = bounds₁)
+    Z₂_new = forward(L2, Z.Z₂,P;bounds = bounds₂)
     output_dim = size(Z.Z₂,1)
     num_approx₁ = size(Z₁_new.G,2)-input_dim
     num_approx₂ = size(Z₂_new.G,2)-input_dim
@@ -185,14 +183,14 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         # selector .= neg₁ .& neg₂
         # Ĝ[selector] .= 0.0
         # ĉ[selector] .= 0.0
-        Debugger.@diffrelu_case_hook zero_diff context="Zero Diff"
-        Debugger.@diffrelu_case_hook neg_neg context="Neg Neg"
+        # Debugger.@diffrelu_case_hook zero_diff context="Zero Diff"
+        # Debugger.@diffrelu_case_hook neg_neg context="Neg Neg"
 
 
         # Neg Pos:
         selector .= neg_pos
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Neg Pos"
+            # Debugger.@diffrelu_case_hook selector context="Neg Pos"
             # println("NEG_POS")
             Ĝ[selector,1:input_dim] .-= (@view Z₂_new.G[selector,1:input_dim])
             Ĝ[selector,input_dim+num_approx₁+1:input_dim+num_approx₁+num_approx₂] .-= (@view Z₂_new.G[selector,input_dim+1:end])
@@ -202,7 +200,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         # Pos Neg:
         selector .= pos_neg
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Pos Neg"
+            # Debugger.@diffrelu_case_hook selector context="Pos Neg"
             # println("POS_NEG")
             Ĝ[selector,1:input_dim+num_approx₁] .+= (@view Z₁_new.G[selector,1:end])
             ĉ[selector] .+= (@view Z₁_new.c[selector])
@@ -213,7 +211,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         # We also need this for Any Pos and Pos Any and thus we copy for those as well
         selector .= pos_pos .| any_pos .| pos_any
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Pos Pos+"
+            # Debugger.@diffrelu_case_hook selector context="Pos Pos+"
             # println("POS_POS")
             Ĝ[selector,1:input_dim+Z.num_approx₁] .= (@view Z.∂Z.G[selector,1:input_dim+Z.num_approx₁])
             if Z.num_approx₂ > 0
@@ -228,7 +226,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         # Any Neg
         selector .= any_neg
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Any Neg"
+            # Debugger.@diffrelu_case_hook selector context="Any Neg"
             # println("ANY_NEG")
             Ĝ[selector,1:(input_dim+num_approx₁)] .= (@view Z₁_new.G[selector,1:end])
             ĉ[selector] .= (@view Z₁_new.c[selector])
@@ -237,7 +235,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         # Neg Any
         selector .= neg_any
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Neg Any"
+            # Debugger.@diffrelu_case_hook selector context="Neg Any"
             # println("NEG_ANY")
             Ĝ[selector,1:input_dim] .-= (@view Z₂_new.G[selector,1:input_dim])
             Ĝ[selector,input_dim+num_approx₁+1:input_dim+num_approx₁+num_approx₂] .-= (@view Z₂_new.G[selector,input_dim+1:end])
@@ -251,7 +249,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         selector .= any_pos
         instable_new_generators += count(selector)
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Any Pos"
+            # Debugger.@diffrelu_case_hook selector context="Any Pos"
             if DEBUG_ANY_POS
                 # println("ANY_POS")
                 Ĝ[selector,:] .= 0.0
@@ -284,7 +282,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         selector .= pos_any
         instable_new_generators += count(selector)
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Pos Any"
+            # Debugger.@diffrelu_case_hook selector context="Pos Any"
             if DEBUG_POS_ANY
                 # println("POS_ANY")
                 Ĝ[selector,:] .= 0.0
@@ -319,7 +317,7 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
         selector .= any_any
         instable_new_generators += count(selector)
         if any(selector)
-            Debugger.@diffrelu_case_hook selector context="Any Any"
+            # Debugger.@diffrelu_case_hook selector context="Any Any"
             # Find cases where ∂upper and ∂lower are 0
             if DEBUG_ANY_ANY
                 # println("ANY_ANY")
@@ -368,13 +366,30 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
     else
         diff_zono_new = DiffZonotope(Z₁_new,Z₂_new,Z.∂Z,num_approx₁,num_approx₂,Z.∂num_approx)
     end
-    Debugger.@post_diffzono_prop_hook diff_zono_new context="Post ReLU"
+    # Debugger.@post_diffzono_prop_hook diff_zono_new context="Post ReLU"
     return diff_zono_new
     end
 end
 
 
-function (N::GeminiNetwork)(Z :: DiffZonotope, P :: PropState)
-    #println("Prop network")
-    return foldl((Z,Ls) -> propagate_diff_layer(Ls,Z,P),zip(N.network1.layers,N.diff_network.layers,N.network2.layers),init=Z)
+function forward(N::GeminiNetwork, Z :: DiffZonotope, P :: PropState) :: DiffZonotope
+    Z_cur = Z
+    for (L1, ∂L, L2) in zip(N.network1.layers,N.diff_network.layers,N.network2.layers)
+        Z_cur = forward(L1, ∂L, L2, Z_cur, P)
+    end
+    return Z_cur
+end
+
+function diff_bound_loss(diff_zono::DiffZonotope)
+    bounds = VeryDiff.zono_bounds(diff_zono.∂Z)
+    low = bounds[:,1]
+    high = bounds[:,2]
+    distance = high .- low
+    return sum(distance)
+end
+
+function forward_diff(N :: GeminiNetwork, diff_zono, P, result :: DiffForwardResult, loss_fn)
+    diff_zono_out = VeryDiff.forward(N,diff_zono,P)
+    result.output = diff_zono_out
+    return loss_fn(diff_zono_out)
 end

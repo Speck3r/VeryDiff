@@ -1,8 +1,8 @@
 function get_sample_distance(N1, N2, vector, focus_dim=nothing)
     if !isnothing(focus_dim)
-        abs.(N1(vector)[focus_dim]-N2(vector)[focus_dim])
+        abs.(forward(N1,vector)[focus_dim]-forward(N2,vector)[focus_dim])
     else
-        maximum(abs.(N1(vector)-N2(vector)))
+        maximum(abs.(forward(N1,vector)-forward(N2,vector)))
     end
 end
 
@@ -34,7 +34,7 @@ function get_epsilon_property(epsilon;focus_dim=nothing)
             end
             # end
             if sample_distance>epsilon
-                return false, (cex_input, (N1(cex_input),N2(cex_input),sample_distance)), nothing, nothing, distance_bound
+                return false, (cex_input, (forward(N1,cex_input),forward(N2,cex_input),sample_distance)), nothing, nothing, distance_bound
             end
 
 
@@ -59,12 +59,12 @@ function get_epsilon_property_naive(epsilon;focus_dim=nothing)
         end
         if distance_bound > epsilon
             sample_distance = if !isnothing(focus_dim)
-                abs.(N1(Zin.Z₁.c)[focus_dim]-N2(Zin.Z₂.c)[focus_dim])
+                abs.(forward(N1,Zin.Z₁.c)[focus_dim]-forward(N2,Zin.Z₂.c)[focus_dim])
             else
-                maximum(abs.(N1(Zin.Z₁.c)-N2(Zin.Z₂.c)))
+                maximum(abs.(forward(N1,Zin.Z₁.c)-forward(N2,Zin.Z₂.c)))
             end
             if sample_distance>epsilon
-                return false, (Zin.Z₁.c, (N1(Zin.Z₁.c),N2(Zin.Z₂.c),sample_distance)), nothing, nothing, distance_bound
+                return false, (Zin.Z₁.c, (forward(N1,Zin.Z₁.c),forward(N2,Zin.Z₂.c),sample_distance)), nothing, nothing, distance_bound
             else
                 return false, nothing, (out_bounds, epsilon, focus_dim), nothing, distance_bound
             end
@@ -96,9 +96,9 @@ function get_top1_property(;delta=zero(Float64),naive=false)
         #generator_importance = zeros(input_dim)
         top_dimension_violation = zeros(input_dim) #size(Zout.Z₁.G,1))
         #other_dimension_importance = zeros(size(Zout.Z₁.G,1))
-        res1 = N1(Zin.Z₁.c)
+        res1 = forward(N1,Zin.Z₁.c)
         argmax_N1 = argmax(res1)
-        argmax_N2 = argmax(N2(Zin.Z₂.c))
+        argmax_N2 = argmax(forward(N2,Zin.Z₂.c))
         softmax_N1 = exp.(res1)/sum(exp.(res1))
         if argmax_N1 != argmax_N2
             if iszero(delta) || softmax_N1[argmax_N1] >= delta
@@ -235,7 +235,7 @@ function get_top1_property(;delta=zero(Float64),naive=false)
                 
                 if !iszero(delta) && !TOP1_FOUND_CONCRETE_DELTA
                     input = Zin.Z₁.G*value.(x[1:input_dim])+Zin.Z₁.c
-                    res1 = N1(input)
+                    res1 = forward(N1,input)
                     argmax_N1 = argmax(res1)
                     softmax_N1 = exp.(res1)/sum(exp.(res1))
                     if softmax_N1[argmax_N1] >= delta
@@ -301,8 +301,8 @@ function get_top1_property(;delta=zero(Float64),naive=false)
                         else
                             distance_bound = max(distance_bound, objective_value(model))
                             input = Zin.Z₁.G*value.(x[1:input_dim])+Zin.Z₁.c
-                            res1 = N1(input)
-                            res2 = N2(input)
+                            res1 = forward(N1,input)
+                            res2 = forward(N2,input)
                             argmax_N1 = argmax(res1)
                             argmax_N2 = argmax(res2)
                             softmax_N1 = exp.(res1)/sum(exp.(res1))

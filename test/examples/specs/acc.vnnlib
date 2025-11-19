@@ -1,0 +1,14 @@
+; ACAS Xu property 1
+
+(declare-const X_0 Real)
+(declare-const X_1 Real)
+
+(declare-const Y_0 Real)
+
+; Unscaled Input 0: (0, 100)
+(assert (<= 0.0 X_0))
+(assert (<= X_0 100.0))
+
+; Unscaled Input 1: (-200, 200)
+(assert (<= -200.0 X_1))
+(assert (<= X_1 200.0))

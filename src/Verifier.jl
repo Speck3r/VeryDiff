@@ -148,7 +148,7 @@ function worker_function_internal(work_queue, threadid, prop_state,N,N1,N2,num_t
             # Initial Pass
             #prop_state.i = 1
             @timeit to "Zonotope Propagate" begin
-            Zout = N(Zin, prop_state)
+            Zout = forward(N, Zin, prop_state)
             end
             if first
                 println("Zono Bounds:")

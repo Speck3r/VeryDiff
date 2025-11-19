@@ -2,11 +2,15 @@ import VNNLib.NNLoader.Network
 import VNNLib.NNLoader.Dense
 import VNNLib.NNLoader.ReLU
 
-function (N::Network)(Z :: Zonotope, P :: PropState)
-    return foldl((Z,L) -> L(Z,P),N.layers,init=Z)
+function forward(N::Network, Z :: Zonotope, P :: PropState) :: Zonotope
+    Zout = Z
+    for L in N.layers
+        Zout = forward(L, Zout, P)
+    end
+    return Zout
 end
 
-function (L::Dense)(Z :: Zonotope,P :: PropState)
+function forward(L::Dense, Z :: Zonotope,P :: PropState) :: Zonotope
     return @timeit to "Zonotope_DenseProp" begin
     G = L.W * Z.G
     c = L.W * Z.c .+ L.b
@@ -24,7 +28,7 @@ function get_slope(l,u, alpha)
     end
 end
 
-function (L::ReLU)(Z :: Zonotope, P :: PropState; bounds = nothing)
+function forward(L::ReLU, Z :: Zonotope, P :: PropState; bounds = nothing) :: Zonotope
     return @timeit to "Zonotope_ReLUProp" begin
     @timeit to "Bounds" begin
     row_count = size(Z.G,1)

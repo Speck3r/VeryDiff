@@ -91,9 +91,9 @@ end
 function propagate_inspection_points(Ls,DS)
     L1, ∂L, L2 = Ls
     if DS.active && !isnothing(DS.propagation_point1)
-        DS.propagation_point1 = L1(DS.propagation_point1)
+        DS.propagation_point1 = forward(L1, DS.propagation_point1)
     end
     if DS.active && !isnothing(DS.propagation_point2)
-        DS.propagation_point2 = L2(DS.propagation_point2)
+        DS.propagation_point2 = forward(L2, DS.propagation_point2)
     end
 end

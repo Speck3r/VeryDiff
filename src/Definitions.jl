@@ -68,13 +68,23 @@ function cleanup_network(network1)
     end
     print(valid_layers)
     @assert length(valid_layers) == length(network2.layers)
-    return Network(network1.layers[valid_layers])
+    return VeryDiffNetwork(tuple(network1.layers[valid_layers]...))
+end
+
+struct VeryDiffNetwork
+    layers :: Tuple{Vararg{<:Union{Dense,ReLU}}}
+    function VeryDiffNetwork(layers :: Tuple{Vararg{<:Union{Dense,ReLU}}})
+        return new(layers)
+    end
+    function VeryDiffNetwork(network :: Network)
+        return new(tuple(network.layers...))
+    end
 end
 
 struct GeminiNetwork
-    network1 :: Network
-    network2 :: Network
-    diff_network :: Network
+    network1 :: VeryDiffNetwork
+    network2 :: VeryDiffNetwork
+    diff_network :: VeryDiffNetwork
     function GeminiNetwork(network1 :: Network, network2 :: Network)
         diff_layers = Layer[]
         if length(network1.layers) > length(network2.layers)
@@ -96,6 +106,6 @@ struct GeminiNetwork
                 error("Unsupported layer type")
             end
         end
-        return new(network1, network2, Network(diff_layers))
+        return new(VeryDiffNetwork(network1), VeryDiffNetwork(network2), VeryDiffNetwork(tuple(diff_layers...)))
     end
 end

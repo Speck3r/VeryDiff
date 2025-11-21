@@ -10,6 +10,23 @@ function forward(N::Network, Z :: Zonotope, P :: PropState) :: Zonotope
     return Zout
 end
 
+function _forward(::Tuple{}, Z, P) 
+    return Z
+end
+
+function _forward(layers::Tuple{Dense,Vararg{<:Union{Dense,ReLU}}}, Z, P)
+    Z_new = forward(first(layers), Z, P)
+    return _forward(Base.tail(layers), Z_new, P)
+end
+function _forward(layers::Tuple{ReLU,Vararg{<:Union{Dense,ReLU}}}, Z, P)
+    Z_new = forward(first(layers), Z, P)
+    return _forward(Base.tail(layers), Z_new, P)
+end
+
+function forward(N::VeryDiffNetwork, Z :: Zonotope, P :: PropState) :: Zonotope
+    return _forward(N.layers, Z, P)
+end
+
 function forward(L::Dense, Z :: Zonotope,P :: PropState) :: Zonotope
     return @timeit to "Zonotope_DenseProp" begin
     G = L.W * Z.G
@@ -26,6 +43,23 @@ function get_slope(l,u, alpha)
     else
         return alpha
     end
+end
+
+function influence_forward_relu(influence :: Nothing, Z, crossing)
+    return nothing
+end
+
+function influence_forward_relu(influence :: Matrix{Float64}, Z, crossing)
+    @timeit to "Allocation" begin
+    influence_new = zeros(Float64, size(influence,1), size(influence,2)+count(crossing))
+    end
+    @timeit to "Set Matrix" begin
+    influence_new[:,1:size(influence,2)] .= influence
+    end
+    @timeit to "Multiply" begin
+    influence_new[:,(size(influence,2)+1):end] .=  abs.(influence) * abs.(@view Z.G[crossing,:])'
+    end
+    return influence_new
 end
 
 function forward(L::ReLU, Z :: Zonotope, P :: PropState; bounds = nothing) :: Zonotope
@@ -50,28 +84,8 @@ function forward(L::ReLU, Z :: Zonotope, P :: PropState; bounds = nothing) :: Zo
 
     ĉ = λ .* Z.c .+ crossing.*γ
     end
-    
-    @timeit to "Influence Matrix" begin
-    if NEW_HEURISTIC
-        # TODO(steuber): Can we avoid this reallocation?
-        @timeit to "Allocation" begin
-        #println(size(Z.influence,1), size(Z.influence,2)+count(crossing))
-        influence_new = zeros(Float64, size(Z.influence,1), size(Z.influence,2)+count(crossing))
-        end
-        @timeit to "Set Matrix" begin
-        influence_new[:,1:size(Z.influence,2)] .= Z.influence
-        end
-        # print("Hello")
-        # print(size(influence_new))
-        # print(size(Z.influence * Z.G[crossing,:]'))
-        @timeit to "Multiply" begin
-        influence_new[:,(size(Z.influence,2)+1):end] .=  abs.(Z.influence) * abs.(@view Z.G[crossing,:])'
-        end
-        # foreach(normalize!, eachcol(@view influence_new[:,(size(Z.influence,2)+1):end]))
-    else
-        influence_new = Z.influence
-    end
-    end
+
+    influence_new = influence_forward_relu(Z.influence, Z, crossing)
 
     @timeit to "Allocation" begin
     Ĝ = zeros(Float64,row_count, size(Z.G,2)+count(crossing))

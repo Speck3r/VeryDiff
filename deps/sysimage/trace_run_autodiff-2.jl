@@ -90,7 +90,7 @@ function compile_autodiff()
     @info "Compiling autodiff for VeryDiff.diff_bound_loss..."
     
     gs = @time Enzyme.autodiff(
-        set_runtime_activity(ReverseWithPrimal),
+        ReverseWithPrimal,
         Const(VeryDiff.forward_diff_diff_bound_loss),
         Active,
         Duplicated(N, N_copy),

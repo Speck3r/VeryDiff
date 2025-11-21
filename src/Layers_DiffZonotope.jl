@@ -133,22 +133,22 @@ function forward(L1 :: ReLU, Ld :: ReLU, L2 :: ReLU, Z::DiffZonotope, P::PropSta
         check .|= any_any
         @assert all(check) "Not all cases covered"
 
-        if !all((zero_diff .+ neg_neg .+ neg_pos .+ neg_any .+ pos_neg .+ pos_pos .+ pos_any .+ any_neg .+ any_pos .+ any_any) .== 1)
-            println("For one of the input dimensions multiple cases were selected -- this smells like a bug!")
-            multiple = (zero_diff .+ neg_neg .+ neg_pos .+ neg_any .+ pos_neg .+ pos_pos .+ pos_any .+ any_neg .+ any_pos .+ any_any) .!= 1
-            println("Indices: ", findall(multiple))
-            println("Neg Neg: ", neg_neg[multiple])
-            println("Neg Pos: ", neg_pos[multiple])
-            println("Neg Any: ", neg_any[multiple])
-            println("Pos Neg: ", pos_neg[multiple])
-            println("Pos Pos: ", pos_pos[multiple])
-            println("Pos Any: ", pos_any[multiple])
-            println("Any Neg: ", any_neg[multiple])
-            println("Any Pos: ", any_pos[multiple])
-            println("Any Any: ", any_any[multiple])
-            println("Zero Di: ", zero_diff[multiple])
-            throw("Multiple cases selected!")
-        end
+        # if !all((zero_diff .+ neg_neg .+ neg_pos .+ neg_any .+ pos_neg .+ pos_pos .+ pos_any .+ any_neg .+ any_pos .+ any_any) .== 1)
+        #     println("For one of the input dimensions multiple cases were selected -- this smells like a bug!")
+        #     multiple = (zero_diff .+ neg_neg .+ neg_pos .+ neg_any .+ pos_neg .+ pos_pos .+ pos_any .+ any_neg .+ any_pos .+ any_any) .!= 1
+        #     println("Indices: ", findall(multiple))
+        #     println("Neg Neg: ", neg_neg[multiple])
+        #     println("Neg Pos: ", neg_pos[multiple])
+        #     println("Neg Any: ", neg_any[multiple])
+        #     println("Pos Neg: ", pos_neg[multiple])
+        #     println("Pos Pos: ", pos_pos[multiple])
+        #     println("Pos Any: ", pos_any[multiple])
+        #     println("Any Neg: ", any_neg[multiple])
+        #     println("Any Pos: ", any_pos[multiple])
+        #     println("Any Any: ", any_any[multiple])
+        #     println("Zero Di: ", zero_diff[multiple])
+        #     throw("Multiple cases selected!")
+        # end
     
         crossing_new_generator = any_pos .| pos_any .| any_any
 
@@ -335,7 +335,7 @@ function forward(L1 :: ReLU, Ld :: ReLU, L2 :: ReLU, Z::DiffZonotope, P::PropSta
                 α ./= (α .- ∂lower[selector])
                 # TODO: what's this?
                 α .= clamp.(α,0.0,1.0)
-                @assert all(α .>= 0.0) && all(α .<= 1.0) "Alpha had wrong values: $(α)"
+                @assert all(α .>= 0.0) && all(α .<= 1.0) #"Alpha had wrong values: $(α)"
                 Ĝ[selector,1:(input_dim+Z.num_approx₁)] .= α .* (@view Z.∂Z.G[selector,1:(input_dim+Z.num_approx₁)])
                 if Z.num_approx₂ > 0
                     Ĝ[selector,input_dim+num_approx₁+1:input_dim+num_approx₁+Z.num_approx₂] .= α .* (@view Z.∂Z.G[selector,input_dim+Z.num_approx₁+1:input_dim+Z.num_approx₁+Z.num_approx₂])
@@ -357,9 +357,9 @@ function forward(L1 :: ReLU, Ld :: ReLU, L2 :: ReLU, Z::DiffZonotope, P::PropSta
             end
         end
 
-        if FIRST_ROUND
-            print("Instable Generators: ",instable_new_generators,"\n")
-        end
+        #if FIRST_ROUND
+        #    print("Instable Generators: ",instable_new_generators,"\n")
+        #end
 
         ∂Z_new = Zonotope(Ĝ, ĉ, Z.∂Z.influence)
         diff_zono_new = DiffZonotope(Z₁_new,Z₂_new, ∂Z_new,num_approx₁,num_approx₂,∂num_approx)
@@ -371,13 +371,28 @@ function forward(L1 :: ReLU, Ld :: ReLU, L2 :: ReLU, Z::DiffZonotope, P::PropSta
     end
 end
 
+function _forward(::Tuple{}, ::Tuple{}, ::Tuple{}, Z, P)
+    return Z
+end
+
+function _forward(L1 :: Tuple{Dense, Vararg{<:Union{Dense,ReLU}}}, 
+                  ∂L :: Tuple{Dense, Vararg{<:Union{Dense,ReLU}}}, 
+                  L2 :: Tuple{Dense, Vararg{<:Union{Dense,ReLU}}}, 
+                  Z :: DiffZonotope, P :: PropState) :: DiffZonotope
+    Z_cur = forward(first(L1), first(∂L), first(L2), Z, P)
+    return _forward(Base.tail(L1), Base.tail(∂L), Base.tail(L2), Z_cur, P)
+end
+
+function _forward(L1 :: Tuple{ReLU, Vararg{<:Union{Dense,ReLU}}}, 
+                  ∂L :: Tuple{ReLU, Vararg{<:Union{Dense,ReLU}}}, 
+                  L2 :: Tuple{ReLU, Vararg{<:Union{Dense,ReLU}}}, 
+                  Z :: DiffZonotope, P :: PropState) :: DiffZonotope
+    Z_cur = forward(first(L1), first(∂L), first(L2), Z, P)
+    return _forward(Base.tail(L1), Base.tail(∂L), Base.tail(L2), Z_cur, P)
+end
 
 function forward(N::GeminiNetwork, Z :: DiffZonotope, P :: PropState) :: DiffZonotope
-    Z_cur = Z
-    for (L1, ∂L, L2) in zip(N.network1.layers,N.diff_network.layers,N.network2.layers)
-        Z_cur = forward(L1, ∂L, L2, Z_cur, P)
-    end
-    return Z_cur
+    return _forward(N.network1.layers, N.diff_network.layers, N.network2.layers, Z, P)
 end
 
 function diff_bound_loss(diff_zono::DiffZonotope)
@@ -392,4 +407,9 @@ function forward_diff(N :: GeminiNetwork, diff_zono, P, result :: DiffForwardRes
     diff_zono_out = VeryDiff.forward(N,diff_zono,P)
     result.output = diff_zono_out
     return loss_fn(diff_zono_out)
+end
+
+function forward_diff_diff_bound_loss(N :: GeminiNetwork, diff_zono, P)
+    diff_zono_out = VeryDiff.forward(N,diff_zono,P)
+    return diff_bound_loss(diff_zono_out)
 end

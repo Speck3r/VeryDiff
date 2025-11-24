@@ -166,3 +166,32 @@ function approximate_polynomial_iterative(net::LayeredModel{S}, input_set, degre
 
     return LayeredModel(layers_poly)   
 end
+
+
+function approximate_polynomial_iterative_sampling(net::LayeredModel{S}, X_in::AbstractVector, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
+    @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
+    layers_poly = Vector{OXP.Node{S}}()
+    ys_layer = X_in 
+    Y_layer = hcat(ys_layer...)'
+    for i in 1:length(net.layers)
+        lb_layer = minimum(Y_layer, dims=1)'
+        ub_layer = maximum(Y_layer, dims=1)' 
+        bounds_layer = hcat(lb_layer, ub_layer)
+
+        verbosity > 0 && println("--- layer $i ---")
+        verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
+        verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
+        !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
+        !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
+
+        layer = net.layers[i]
+        layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+        push!(layers_poly, layer_poly)
+
+        # TODO: can flux evaluate this in batch mode?
+        ys_layer = [OXP.onnx_node_to_flux_layer(layer_poly)(y) for y in ys_layer]
+        Y_layer = hcat(ys_layer...)'
+    end
+
+    return LayeredModel(layers_poly)   
+end

@@ -48,7 +48,7 @@ function two_generator_bound(G::Matrix{Float64}, b, H::Matrix{Float64})
     return [sum(j->abs(G[i,j]+b*H[i,j]),1:size(G,2)) for i in 1:size(G,1)]
 end
 
-function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::PropState)
+function propagate_diff_layer_legacy(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::PropState)
     #println("Prop relu")
     return @timeit to "DiffZonotope_ReLUProp" begin
     #println("ReLU")
@@ -373,6 +373,205 @@ function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::P
     end
 end
 
+function propagate_diff_layer(Ls :: Tuple{ReLU,ReLU,ReLU}, Z::DiffZonotope, P::PropState)
+    legacy_result = propagate_diff_layer_legacy(Ls, deepcopy(Z), deepcopy(P))
+    #println("Prop relu")
+    return @timeit to "DiffZonotope_ReLUProp" begin
+    #println("ReLU")
+    L1, _, L2 = Ls
+    Debugger.@pre_diffzono_prop_hook Z context="Pre ReLU"
+    Debugger.@diff_layer_inspection_hook Ls
+    input_dim = size(Z.Z₂,2)-Z.num_approx₂
+
+    # Compute Bounds
+    bounds₁ = zono_bounds(Z.Z₁)
+    bounds₂ = zono_bounds(Z.Z₂)
+    lower₁ = @view bounds₁[:,1]
+    upper₁ = @view bounds₁[:,2]
+    lower₂ = @view bounds₂[:,1]
+    upper₂ = @view bounds₂[:,2]
+
+    # Compute Zonotopes for individual networks
+    Z₁_new = L1(Z.Z₁,P;bounds = bounds₁)
+    Z₂_new = L2(Z.Z₂,P;bounds = bounds₂)
+    output_dim = size(Z.Z₂,1)
+    num_approx₁ = size(Z₁_new.G,2)-input_dim
+    num_approx₂ = size(Z₂_new.G,2)-input_dim
+    if USE_DIFFZONO
+        ∂bounds = zono_bounds(Z.∂Z)
+        ∂lower = @view ∂bounds[:,1]
+        ∂upper = @view ∂bounds[:,2]
+
+        zero_diff = ∂upper .== 0.0 .&& ∂lower .== 0.0
+
+        # Compute Phase Behaviour
+        check = copy(zero_diff)
+        
+        neg_neg = (upper₁ .<= 0.0) .&& (upper₂ .<= 0.0) .&& .!check
+        check .|= neg_neg
+        neg_pos = (upper₁ .<= 0.0) .&& (lower₂ .>= 0.0) .&& .!check
+        check .|= neg_pos
+        pos_neg = (lower₁ .>= 0.0) .&& (upper₂ .<= 0.0) .&& .!check
+        check .|= pos_neg
+        pos_pos = (lower₁ .>= 0.0) .&& (lower₂ .>= 0.0) .&& .!check
+        check .|= pos_pos
+        any_neg = (lower₁ .< 0.0) .&& (upper₁ .> 0.0) .&& (upper₂ .<= 0.0) .&& .!check
+        check .|= any_neg
+        neg_any = (upper₁ .<= 0.0) .&& (lower₂ .< 0.0) .&& (upper₂ .> 0.0) .&& .!check
+        check .|= neg_any
+        any_pos = (lower₁ .< 0.0) .&& (upper₁ .> 0.0) .&& (lower₂ .>= 0.0) .&& .!check
+        check .|= any_pos
+        pos_any = (lower₁ .>= 0.0) .&& (lower₂ .< 0.0) .&& (upper₂ .> 0.0) .&& .!check
+        check .|= pos_any
+        any_any = (lower₁ .< 0.0) .&& (upper₁ .> 0.0) .&& (lower₂ .< 0.0) .&& (upper₂ .> 0.0) .&& .!check
+        check .|= any_any
+        @assert all(check) "Not all cases covered"
+
+        crossing_new_generator = any_pos .| pos_any .| any_any
+
+        # Compute new dimensions
+        ∂num_approx = Z.∂num_approx+count(crossing_new_generator)
+        
+
+        Ĝ = zeros(Float64,
+            output_dim,
+            input_dim+num_approx₁+num_approx₂+∂num_approx)
+        ĉ = zeros(output_dim)
+
+        # Div 0 never shows up in the results but preventing it is important for
+        # reverse mode autodiff
+        range₁ = upper₁ .- lower₁ #max.(1e-12, upper₁ .- lower₁)
+        range₂ = upper₂ .- lower₂ #max.(1e-12, upper₂ .- lower₂)
+        ∂range = ∂upper .- ∂lower #max.(1e-12, ∂upper .- ∂lower)
+
+        λ₁ = upper₁ ./ range₁
+        λ₂ = upper₂ ./ range₂
+        ∂λ = clamp.(∂upper ./ ∂range,0.0,1.0)
+        μ₁ = 0.5 .* λ₁ .* upper₁
+        μ₂ = 0.5 .* λ₂ .* upper₂
+        ∂μ = 0.5 .* max.(.-∂lower, ∂upper)
+        ∂ν = ∂λ .* max.(0.0, .-∂lower)
+
+        a₁ = ifelse.(any_neg .|| pos_neg, 1.0,
+                ifelse.(any_pos, -1.0, 0.0))
+        a₂ = ifelse.(neg_any .|| neg_pos, -1.0,
+                ifelse.(pos_any, 1.0, 0.0))
+        ∂a = ifelse.(any_any, ∂λ,
+                ifelse.(pos_pos .|| any_pos .|| pos_any, 1.0, 0.0))
+        b = ifelse.(any_any, ∂ν .- ∂μ,
+                ifelse.(any_pos, μ₁,
+                ifelse.(pos_any, .-μ₂, 0.0)))
+        c = abs.(ifelse.(any_any, ∂μ,
+                ifelse.(any_pos, μ₁,
+                ifelse.(pos_any, μ₂,
+                0.0))))
+        
+        Ĝ[:,1:(input_dim+num_approx₁)] .+= a₁ .* Z₁_new.G
+        ĉ .+= a₁ .* Z₁_new.c
+        Ĝ[:,1:input_dim] .+= a₂ .* (@view Z₂_new.G[:,1:input_dim])
+        ĉ .+= a₂ .* Z₂_new.c
+        if num_approx₂ > 0
+            Ĝ[:,(input_dim+num_approx₁+1):(input_dim+num_approx₁+num_approx₂)] .+= a₂ .* (@view Z₂_new.G[:,(input_dim+1):end])
+        end
+        Ĝ[:,input_dim] .+= ∂a .* (@view Z.∂Z.G[:,input_dim])
+        ĉ .+= ∂a .* Z.∂Z.c
+        if Z.num_approx₁ > 0
+            Ĝ[:,(input_dim+1):(input_dim+Z.num_approx₁)] .+= ∂a .* (@view Z.∂Z.G[:,(input_dim+1):(input_dim+Z.num_approx₁)])
+        end
+        if Z.num_approx₂ > 0
+            Ĝ[:,(input_dim+num_approx₁+1):(input_dim+num_approx₁+Z.num_approx₂)] .+= ∂a .* (@view Z.∂Z.G[:,(input_dim+Z.num_approx₁+1):(input_dim+Z.num_approx₁+Z.num_approx₂)])
+        end
+        if Z.∂num_approx > 0
+            Ĝ[:,(input_dim+num_approx₁+num_approx₂+1):(input_dim+num_approx₁+num_approx₂+Z.∂num_approx)] .+= ∂a .* (@view Z.∂Z.G[:,(input_dim+Z.num_approx₁+Z.num_approx₂+1):end])
+        end
+        
+        # Get non zero indices for c
+        c_non_zero_indices = findall(x->x!=0.0,c)
+        for (i,j) in enumerate(c_non_zero_indices)
+            Ĝ[j,input_dim+num_approx₁+num_approx₂+Z.∂num_approx + i] = c[j]
+        end
+
+
+        ĉ .+= b
+        
+        ∂Z_new = Zonotope(Ĝ, ĉ, Z.∂Z.influence)
+        diff_zono_new = DiffZonotope(Z₁_new,Z₂_new, ∂Z_new,num_approx₁,num_approx₂,∂num_approx)
+    else
+        diff_zono_new = DiffZonotope(Z₁_new,Z₂_new,Z.∂Z,num_approx₁,num_approx₂,Z.∂num_approx)
+    end
+    Debugger.@post_diffzono_prop_hook diff_zono_new context="Post ReLU"
+    # Assert that legacy and new results are the same
+    @assert diff_zono_new.num_approx₁ == legacy_result.num_approx₁ "num_approx₁ differ between legacy and new implementation"
+    @assert diff_zono_new.num_approx₂ == legacy_result.num_approx₂ "num_approx₂ differ between legacy and new implementation"
+    @assert diff_zono_new.∂num_approx == legacy_result.∂num_approx "∂num_approx differ between legacy and new implementation"
+    @assert isequal(diff_zono_new.Z₁.G, legacy_result.Z₁.G) "Z₁.G differ between legacy and new implementation"
+    @assert isequal(diff_zono_new.Z₁.c, legacy_result.Z₁.c) "Z₁.c differ between legacy and new implementation"
+    @assert isequal(diff_zono_new.Z₂.G, legacy_result.Z₂.G) "Z₂.G differ between legacy and new implementation"
+    @assert isequal(diff_zono_new.Z₂.c, legacy_result.Z₂.c) "Z₂.c differ between legacy and new implementation"
+    if !isequal(diff_zono_new.∂Z.G, legacy_result.∂Z.G)
+        if !isequal(diff_zono_new.∂Z.G[neg_neg,:], legacy_result.∂Z.G[neg_neg,:])
+            println("Neg Neg generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[neg_pos,:], legacy_result.∂Z.G[neg_pos,:])
+            println("Neg Pos generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[pos_neg,:], legacy_result.∂Z.G[pos_neg,:])
+            println("Pos Neg generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[pos_pos,:], legacy_result.∂Z.G[pos_pos,:])
+            println("Pos Pos generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[any_neg,:], legacy_result.∂Z.G[any_neg,:])
+            println("Any Neg generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[neg_any,:], legacy_result.∂Z.G[neg_any,:])
+            println("Neg Any generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[any_pos,:], legacy_result.∂Z.G[any_pos,:])
+            println("Any Pos generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[pos_any,:], legacy_result.∂Z.G[pos_any,:])
+            println("Pos Any generators do not match")
+        end
+        if !isequal(diff_zono_new.∂Z.G[any_any,:], legacy_result.∂Z.G[any_any,:])
+            println("Any Any generators do not match")
+        end
+        # Check exact Generators
+        if all(isapprox.(diff_zono_new.∂Z.G[:,1:input_dim], legacy_result.∂Z.G[:,1:input_dim], atol=1e-5))
+            println("Exact input generators match")
+        else
+            println("Input generators do not match!")
+            println("Difference:")
+            println(diff_zono_new.∂Z.G[:,1:input_dim] - legacy_result.∂Z.G[:,1:input_dim])
+        end
+        if all(isapprox.(diff_zono_new.∂Z.G[:,(input_dim+1):(input_dim+legacy_result.num_approx₁)], legacy_result.∂Z.G[:,(input_dim+1):(input_dim+legacy_result.num_approx₁)], atol=1e-5))
+            println("Exact num_approx₁ generators match")
+        else
+            println("num_approx₁ generators do not match!")
+            println("Difference:")
+            println(diff_zono_new.∂Z.G[:,(input_dim+1):(input_dim+legacy_result.num_approx₁)] - legacy_result.∂Z.G[:,(input_dim+1):(input_dim+legacy_result.num_approx₁)])
+        end
+        if all(isapprox.(diff_zono_new.∂Z.G[:,(input_dim+legacy_result.num_approx₁+1):(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂)], legacy_result.∂Z.G[:,(input_dim+legacy_result.num_approx₁+1):(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂)], atol=1e-5))
+            println("Exact num_approx₂ generators match")
+        else
+            println("num_approx₂ generators do not match!")
+            println("Difference:")
+            println(diff_zono_new.∂Z.G[:,(input_dim+legacy_result.num_approx₁+1):(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂)] - legacy_result.∂Z.G[:,(input_dim+legacy_result.num_approx₁+1):(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂)])
+        end
+        if all(isapprox.(diff_zono_new.∂Z.G[:,(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂+1):end], legacy_result.∂Z.G[:,(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂+1):end], atol=1e-5))
+            println("Exact ∂num_approx generators match")
+        else
+            println("∂num_approx generators do not match!")
+            println("Difference:")
+            println(diff_zono_new.∂Z.G[:,(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂+1):end] - legacy_result.∂Z.G[:,(input_dim+legacy_result.num_approx₁+legacy_result.num_approx₂+1):end])
+        end
+        throw("∂Z.G differ between legacy and new implementation")
+    end
+
+    @assert isequal(diff_zono_new.∂Z.c, legacy_result.∂Z.c) "∂Z.c differ between legacy and new implementation"
+    return diff_zono_new
+    end
+end
 
 function (N::GeminiNetwork)(Z :: DiffZonotope, P :: PropState)
     #println("Prop network")

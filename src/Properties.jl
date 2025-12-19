@@ -351,6 +351,179 @@ function get_top1_property(;delta=zero(Float64),naive=false)
     end
 end
 
+function get_top1_both_confident_property(;delta1, delta2,naive=false)
+    dist1 = iszero(delta1) ? 0.0 : log(delta1/(1-delta1))
+    dist2 = iszero(delta2) ? 0.0 : log(delta2/(1-delta2))
+
+    return (N1, N2, Zin, Zout, verification_status) -> begin
+        global FIRST_ROUND
+        global TOP1_FOUND_CONCRETE_DELTA
+        if FIRST_ROUND
+            TOP1_FOUND_CONCRETE_DELTA = false
+        end
+        if isnothing(verification_status)
+            verification_status = Dict{Tuple{Int,Int},Bool}()
+        end
+        input_dim = size(Zout.Z₂,2)-Zout.num_approx₂
+        top_dimension_violation = zeros(input_dim) 
+        res1 = N1(Zin.Z₁.c)
+        res2 = N2(Zin.Z₂.c)
+        argmax_N1 = argmax(res1)
+        argmax_N2 = argmax(res2)
+        softmax_N1 = exp.(res1)/sum(exp.(res1))
+        softmax_N2 = exp.(res2)/sum(exp.(res2))
+        if argmax_N1 != argmax_N2
+            if iszero(delta1) || (softmax_N1[argmax_N1] >= delta1 && softmax_N2[argmax_N2] >= delta2)
+                println("Found cex")
+                println("N1 Probability: $(softmax_N1[argmax_N1]) >= $delta1")
+                println("N1 Probability: $(softmax_N2[argmax_N2]) >= $delta2")
+                return false, (Zin.Z₁.c, (argmax_N1, argmax_N2)), nothing, nothing, 0.0
+            else
+                second_largest = sort(res1,rev=true)[2]
+                second_largest2 = sort(res2,rev=true)[2]
+                if !iszero(delta1) && (res1[argmax_N1]-second_largest >= dist1 || res2[argmax_N2]-second_largest2 >= dist2)
+                    println("Found spurious cex")
+                    println("N1 Probability: $(softmax_N1[argmax_N1]) $delta1")
+                    println("N2 Probability: $(softmax_N2[argmax_N2]) $delta2")
+                    println("but difference $(res1[argmax_N1]-second_largest) >= $dist (approximate bound) or difference $(res2[argmax_N2]-second_largest2) >= $dist")
+                end
+            end
+        end
+        property_satisfied = true
+        distance_bound = 0.0
+        any_feasible = false
+        for top_index in 1:size(Zout.Z₁,1)
+            G1 = Zout.Z₁.G .- Zout.Z₁.G[top_index:top_index,:]
+            c1 = Zout.Z₁.c[top_index] .- Zout.Z₁.c
+
+            #G3 = Zout.Z₂.G .- Zout.Z₂.G[top_index:top_index, :]
+            #c3 = Zout.Z₂.c[top_index] .- Zout.Z₂.c
+
+            if USE_GUROBI
+                model = Model(() -> Gurobi.Optimizer(GRB_ENV[]))
+            else
+                model = Model(GLPK.Optimizer)
+            end
+            set_time_limit_sec(model, 10)
+            var_num = size(Zin.Z₁.G,2) + Zout.num_approx₁ + Zout.num_approx₂ + Zout.∂num_approx
+            @variable(model,-1.0 <= x[1:var_num] <= 1.0)
+            
+            if !naive
+                G2 = copy(Zout.∂Z.G)
+                offset = 1
+                G2[:,offset:input_dim] .+= Zout.Z₂.G[:,1:input_dim] .- Zout.Z₁.G[:,1:input_dim]
+                offset += input_dim
+                G2[:,offset:(offset+Zout.num_approx₁-1)] .-= Zout.Z₁.G[:,(input_dim+1):end]
+                offset += Zout.num_approx₁
+                G2[:,offset:(offset+Zout.num_approx₂-1)] .+= Zout.Z₂.G[:,(input_dim+1):end]
+                @constraint(model,
+                    G2*x .== (Zout.Z₁.c .- Zout.∂Z.c .- Zout.Z₂.c)
+                )
+            end
+
+            Debugger.@inspect_pre_top1_model model
+            
+            @constraint(model,G1[1:end .!= top_index,:]*x[1:size(Zout.Z₁.G,2)] .<= (c1[1:end .!= top_index] .-dist1))
+            #@constraint(model,G3[1:end .!= top_index,:]*x[1:size(Zout.Z₂.G,2)] .<= (c3[1:end .!= top_index] .-dist2))
+
+            @objective(model,Max,0)
+            
+            optimize!(model)
+            
+            if termination_status(model) == MOI.INFEASIBLE
+                for other_index in 1:size(Zout.Z₁,1)
+                    verification_status[(top_index,other_index)]=true
+                end
+            else
+                if !iszero(delta1) && !TOP1_FOUND_CONCRETE_DELTA
+                    input = Zin.Z₁.G*value.(x[1:input_dim])+Zin.Z₁.c
+                    res1 = N1(input)
+                    argmax_N1 = argmax(res1)
+                    softmax_N1 = exp.(res1)/sum(exp.(res1))
+                    res2 = N2(input)
+                    argmax_N2 = argmax(res2)
+                    softmax_N2 = exp.(res2)/sum(exp.(res2))
+                    if (softmax_N1[argmax_N1] >= delta1 && softmax_N2[argmax_N2] >= delta2)
+                        println("Required confidence ($(softmax_N1[argmax_N1])≥$delta1) and ($(softmax_N2[argmax_N2])≥$delta2) is feasible for index $argmax_N1 and $argmax_N2")
+                        TOP1_FOUND_CONCRETE_DELTA=true
+                    else
+                    end
+                end
+                any_feasible = true
+                for other_index in 1:size(Zout.Z₁,1)
+                    if other_index != top_index && !haskey(verification_status, (top_index,other_index))
+                        a = zeros(var_num)
+                        input_dim = size(Zin.Z₂.G,2)
+                        a[1:input_dim] .= Zout.Z₂.G[other_index,1:input_dim].-Zout.Z₂.G[top_index,1:input_dim]
+                        offset = input_dim + Zout.num_approx₁ + 1
+                        a[offset:(offset + Zout.num_approx₂-1)] .= Zout.Z₂.G[other_index,(input_dim+1):end].-Zout.Z₂.G[top_index,(input_dim+1):end]
+
+						G3 = Zout.Z₂.G .- Zout.Z₂.G[other_index:other_index, :]
+						c3 = Zout.Z₂.c[other_index] .- Zout.Z₂.c
+
+                        #other_model = copy_model(model)
+                        new_model, reference_map = copy_model(model);
+                        x_new = reference_map[x]
+                        #@constraint(model,G1[1:end .!= top_index,:]*x[1:size(Zout.Z₁.G,2)] .<= (c1[1:end .!= top_index] .-dist1))
+                        @constraint(new_model,G3[1:end .!= other_index,:]*x_new[1:size(Zout.Z₂.G,2)] .<= (c3[1:end .!= other_index] .-dist2))
+                        @objective(new_model,Max,0)
+                        violation_difference = a
+                        
+                        #threshold = Zout.Z₂.c[top_index]-Zout.Z₂.c[other_index]
+                        #if USE_GUROBI 
+                         #   set_optimizer_attribute(model, "Cutoff", threshold-1e-6)
+                        #end
+                        optimize!(model)
+                        
+                        model_status = termination_status(model)
+                        
+                        #@assert model_status != MOI.INFEASIBLE
+                        if model_status == MOI.INFEASIBLE
+         	                verification_status[(top_index,other_index)]=true
+               	        else
+                            distance_bound = max(distance_bound, objective_value(model))
+                            input = Zin.Z₁.G*value.(x[1:input_dim])+Zin.Z₁.c
+                            res1 = N1(input)
+                            res2 = N2(input)
+                            argmax_N1 = argmax(res1)
+                            argmax_N2 = argmax(res2)
+                            softmax_N1 = exp.(res1)/sum(exp.(res1))
+                            softmax_N2 = exp.(res2)/sum(exp.(res2))
+                            if argmax_N1 != argmax_N2
+                                if iszero(delta1) || (softmax_N1[argmax_N1] >= delta1 && softmax_N2[argmax_N2] >= delta2)
+                                    println("Found cex")
+                                    second_most = sort(softmax_N1,rev=true)[2]
+                                    println("N1: $(softmax_N1[argmax_N1]) (vs. $second_most)")
+                                    softmax_N2 = exp.(res2)/sum(exp.(res2))
+                                    println("N2: $(softmax_N2[argmax_N2]) >= $delta2)")
+                                    println("N1 Probability: $(softmax_N1[argmax_N1]) >= $delta1")
+                                    return false, (input, (argmax_N1, argmax_N2)), nothing, nothing, 0.0
+                                else
+                                    second_largest = sort(res1,rev=true)[2]
+                                    second_largest2 = sort(res2,rev=true)[2]
+                                    if !iszero(delta1) && (res1[argmax_N1]-second_largest >= dist1 || res2[argmax_N2]-second_largest2 >= dist2)
+                                        println("Found spurious cex")
+                                        println("N1 Probability: $(softmax_N1[argmax_N1]) < $delta1 and/or")
+                                        println("N1 Probability: $(softmax_N2[argmax_N2]) < $delta2")
+                                        println("but difference $(res1[argmax_N1]-second_largest) >= $dist1 or $(res2[argmax_N2]-second_largest2) >= $dist2 (approximate bound)")
+                                    end
+                                   top_dimension_violation .+= abs.(violation_difference[1:input_dim])
+                                   property_satisfied = false
+                               end
+                            else
+                                top_dimension_violation .+= abs.(violation_difference[1:input_dim])
+                                property_satisfied = false
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        @assert !iszero(delta1) || any_feasible "One output must be maximal, but our analysis says there is no maximum -- this smells like a bug!"
+        return property_satisfied, nothing, top_dimension_violation, verification_status, distance_bound
+    end
+end
+
 function top1_configure_split_heuristic(mode)
     # dimension_importance_mode = if mode == 0
     #     (t,o) -> (t.>0)

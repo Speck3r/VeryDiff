@@ -45,4 +45,7 @@ include("Top1.jl")
 
 export get_top1_property, top1_configure_split_heuristic
 
+include("SymmetricRobustness.jl")
+export get_top1_both_confident_property
+
 end # module Properties

@@ -232,6 +232,7 @@ function get_top1_both_confident_property(delta1, delta2;naive=false)
                             end
                             @constraint(new_model, lhs2 .<= rhs2)
 
+                            # This helps with finding counterexamples faster
                             @objective(new_model,Max,obj)
 
                             optimize!(new_model)

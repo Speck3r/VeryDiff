@@ -149,6 +149,7 @@ function run_cmd(args)
     if robustness_delta_symmetric != -Inf64
         delta1 = robustness_delta_symmetric
         delta2 = parsed_args["robustness-delta-symmetric-N2"]
+        @assert delta2 != -Inf64 "Must provide both deltas for symmetric robustness"
         @assert isnothing(property) "Cannot specify both epsilon and robustness delta"
         @assert 0.5 <= delta1 < 1.0 "Invalid delta1"
         @assert 0.5 <= delta2 < 1.0 "Invalid delta2"

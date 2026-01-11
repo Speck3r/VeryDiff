@@ -16,7 +16,7 @@ import torch
 from torch.onnx import _constants
 
 _constants.ONNX_DEFAULT_OPSET = 20  # want to support gelu
-#torch.onnx.utils.GLOBALS.export_onnx_opset_version = 20
+torch.onnx.utils.GLOBALS.export_onnx_opset_version = 20
 
 #sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))         
 #sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../alpha-beta-CROWN/auto_LiRPA')))

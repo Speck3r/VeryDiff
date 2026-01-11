@@ -12,6 +12,9 @@ using CSV
 using PolynomialRoots
 using Optim
 using JLD2
+using Artifacts
+using PythonCall
+using HDF5
 
 using GLPK
 using Gurobi
@@ -44,6 +47,10 @@ const ALMOST_ZERO_LEADING_COEFF_WARNING = Ref{Bool}(true)
 """if leading coefficient of chebyshev polynomial has abs value smaller than this, we assume it is zero for roots computation"""
 const ROOTS_ALMOST_ZERO_TOL = Ref{Float64}(1e-15)
 
+const ABCROWN_PATH = Ref{String}("")
+const AUTOLIRPA_PATH = Ref{String}("")
+const PYTHON_SCRIPTS_DIR = joinpath(@__DIR__, "..", "python")
+
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()
     BLAS.set_num_threads(1)
@@ -65,6 +72,14 @@ function __init__()
         println("!!! falling back to GLPK !!!")
         USE_GUROBI = false
     end
+
+    # artifacts only downloads alpha-beta-CROWN without the auto_LiRPA submodule, so we need to add both as separate artifacts.
+    # TODO: can we move auto_LiRPA into its place in alpha-beta-CROWN automatically?
+    ABCROWN_PATH[] = artifact"alpha-beta-CROWN"
+    AUTOLIRPA_PATH[] = artifact"auto_LiRPA"
+    pyimport("sys")."path".append(joinpath(ABCROWN_PATH[], "alpha-beta-CROWN-main"))
+    pyimport("sys")."path".append(joinpath(AUTOLIRPA_PATH[], "auto_LiRPA-master"))
+    pyimport("sys")."path".append(PYTHON_SCRIPTS_DIR)
 end
 
 #pinthreads(:cores)

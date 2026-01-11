@@ -29,7 +29,8 @@ end
 
 function approximate_polynomial(L::OXP.ONNXLinear, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     # nothing to do here
-    return L    
+    # no error for linear layer
+    return L, 0.
 end
 
 function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
@@ -61,7 +62,7 @@ function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, ver
     # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.
     # Therefore, we reuse the same node names.
     layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
-    return layer
+    return layer, ϵs
 end
 
 
@@ -80,6 +81,7 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
         gelu = x -> 0.5 * x * (1 + erf(x / sqrt(2)))
         p = chebyshev_coefficients.(gelu, lower, upper, degree)
         ps = hcat(p...)'
+        ϵs = -1  # TODO: can we get the real error?
 
         # we don't know the error yet (could use an overapproximation/just a sampled approximation of the error?)
         verbosity > 0 && println("GeLU chebyshev approximation")
@@ -103,17 +105,19 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
     # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.
     # Therefore, we reuse the same node names.
     layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
-    return layer
+    return layer, ϵs
 end
 
 
 function approximate_polynomial(L::ONNXPoly, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     @warn "skipping already polynomial layer (but degree might differ!/Cheby vs. Monomial Form might not match!)"
-    return L    
+    # no error for already polynomial layer
+    return L, 0.
 end
 
 function approximate_polynomial(L::OXP.ONNXFlatten, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
-    return L    
+    # no error for flattening layer
+    return L, 0. 
 end
 
 
@@ -121,7 +125,7 @@ function approximate_polynomial(net::LayeredModel, bounds::AbstractVector, degre
     # attention: bounds are bounds AFTER the layer
     # for ReLU layers, we need the bound after the linear layer before that, the linear layers don't need any bounds
     bounds = [[[]]; bounds[1:end-1]]
-    layers = map(x -> approximate_polynomial(x[1], x[2], degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer),
+    layers = map(x -> approximate_polynomial(x[1], x[2], degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)[1],
                  zip(net.layers, bounds))
     return LayeredModel(layers)
 end
@@ -158,7 +162,7 @@ function approximate_polynomial_iterative(net::LayeredModel{S}, input_set, degre
         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
 
         layer = net.layers[i]
-        layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+        layer_poly, ϵs = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
         push!(layers_poly, layer_poly)
 
         ẑ = layer_poly(ẑ, prop_state)
@@ -185,7 +189,7 @@ function approximate_polynomial_iterative_sampling(net::LayeredModel{S}, X_in::A
         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
 
         layer = net.layers[i]
-        layer_poly = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+        layer_poly, ϵs = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
         push!(layers_poly, layer_poly)
 
         # TODO: can flux evaluate this in batch mode?
@@ -194,4 +198,88 @@ function approximate_polynomial_iterative_sampling(net::LayeredModel{S}, X_in::A
     end
 
     return LayeredModel(layers_poly)   
+end
+
+
+"""
+Iteratively approximate each layer in the network by a polynomial of a given degree with pre-activation ranges computed via alpha-beta-CROWN.
+
+The pre-activation ranges are computed using additional error inputs added to the network after every activation layer.
+
+args:
+    onnx_path - Path to ONNX network to approximate
+    degree - degree of polynomial approximation for ReLU layers
+
+kwargs:
+    verbosity - verbosity level (0: silent, 1: print first 5 lower and upper bounds)
+    cheby - whether to use Chebyshev basis (true) or Monomial basis (false) for polynomial approximation
+    max_iter - maximum number of iterations for Remez algorithm
+    max_polys_per_layer - maximum number of different polynomials to use per layer
+"""
+function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+    ERROR_NODES_SCRIPT = pyimport("insert_error_nodes")
+    BOUNDS_SCRIPT      = pyimport("get_bounds")
+
+    # load model in julia
+    model = load_onnx_model(onnx_path)
+    lmodel = to_layered_model(model)
+
+    # extend network by error inputs
+    error_net_path = "error_net.onnx"
+    ERROR_NODES_SCRIPT.insert_error_nodes(onnx_path, error_net_path)
+    # run(`$(ABCROWN_PYTHONPATH) $(ERROR_NODES_SCRIPT) $(onnx_path) $(error_net_path)`)
+
+    input_bounds_file = "input_bounds.h5"
+    activations_considered = []
+    error_magnitudes = []
+    layer_bounds = []
+    layers_poly = Vector{OXP.Node}()
+
+    for (i, l) in enumerate(lmodel.layers)
+        if (l isa OXP.ONNXRelu) || (l isa OXP.ONNXGelu)
+            # prepare input bounds
+            h5open(input_bounds_file, "w") do file 
+                for (k, v) in model.input_shapes
+                    # TODO: make this more general than just [0,1] input bounds
+                    lb = zeros(v)
+                    ub = ones(v)
+                    # hdf5 already converts from WHCN to NCHW
+                    file[k] = cat(lb, ub, dims=ndims(lb))
+                end
+
+                for (l, ϵs) in zip(activations_considered, error_magnitudes)
+                    error_name = "eps_" * l.name
+                    file[error_name] = reshape(ϵs, :, 1)  # append a batch dimension
+                end
+            end
+
+            output_name = l.inputs[1]
+            output_bounds = "out_bounds.h5"
+            BOUNDS_SCRIPT.compute_pre_activation_bounds(error_net_path, input_bounds_file, output_name; outfile=output_bounds, method="alpha-crown")
+            # run(`$ABCROWN_PYTHONPATH $(BOUNDS_SCRIPT) $(error_net_path) $(input_bounds_file) $(output_name) --output_file $(output_bounds)`)
+
+            bounds = h5open(output_bounds, "r") do file 
+                read(file[output_name])
+            end
+
+            # ϵs = compute_approximation_errors(bounds, ϵ=0.05)
+            layer_poly, ϵs = VeryDiff.approximate_polynomial(l, bounds, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+
+            push!(activations_considered, l)
+            push!(error_magnitudes, ϵs)
+            push!(layer_bounds, bounds)
+
+            verbosity > 0 && println("--- layer $i ---")
+            verbosity > 0 && println("lower = ", bounds[:,1][1:min(size(bounds, 1), 5)])
+            verbosity > 0 && println("upper = ", bounds[:,2][1:min(size(bounds, 1), 5)])
+            !all(isfinite.(bounds)) && println("lb non-finite: ", (1:size(bounds,1))[.~isfinite.(bounds[:,1])])
+            !all(isfinite.(bounds)) && println("ub non-finite: ", (1:size(bounds,1))[.~isfinite.(bounds[:,2])])
+        else
+            layer_poly = l
+        end
+        push!(layers_poly, layer_poly)
+    end
+
+    # need to do [l for l in layers_poly] to convert from OXP.Node without information about identifier type to OXP.Node{S}
+    return LayeredModel([l for l in layers_poly])
 end

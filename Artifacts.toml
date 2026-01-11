@@ -1,0 +1,13 @@
+[alpha-beta-CROWN]
+git-tree-sha1 = "24d28c8e9ab2544564e16b2038bcc6801a928416"
+
+    [[alpha-beta-CROWN.download]]
+    sha256 = "0c7930b4d9255053101e017b4d7ced2a34309bcee3c1a665a4b5fbaf8afa527d"
+    url = "https://github.com/Verified-Intelligence/alpha-beta-CROWN/archive/refs/heads/main.tar.gz"
+
+[auto_LiRPA]
+git-tree-sha1 = "d7f01ebfd4aaedf98bb83d89485d9d5d11b9aaa8"
+
+    [[auto_LiRPA.download]]
+    sha256 = "d205d8dc6e7a6626a60625616e796b908dc46db5bb64bea597fabe16557b64b1"
+    url = "https://github.com/Verified-Intelligence/auto_LiRPA/archive/refs/heads/master.tar.gz"

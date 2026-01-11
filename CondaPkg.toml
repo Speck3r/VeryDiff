@@ -1,0 +1,22 @@
+channels = ["pytorch", "conda-forge"]
+
+[deps]
+appdirs = ""
+onnx = ""
+packaging = ""
+pip = ""
+scikit-learn = ""
+tqdm = ""
+h5py = ""
+sortedcontainers = ""
+torchvision = ""
+graphviz = ""
+python = "3.11.*"
+python-graphviz = ""
+pytorch = ">=2.5"
+numpy = ""
+scipy = ""
+
+[pip.deps]
+onnx-graphsurgeon = ""
+onnx2pytorch = "@ git+https://github.com/phK3/onnx2pytorch.git@gelu-support"

@@ -13,7 +13,7 @@ torchvision = ""
 graphviz = ""
 python = "3.11.*"
 python-graphviz = ""
-pytorch = ">=2.5"
+pytorch = "==2.8.0"
 numpy = ""
 scipy = ""
 

@@ -2,7 +2,7 @@ channels = ["pytorch", "conda-forge"]
 
 [deps]
 appdirs = ""
-onnx = ""
+onnx = ">=1.14,<1.20"  # to prevent onnx.helper has not attribute float32_to_bfloat16 error
 packaging = ""
 pip = ""
 scikit-learn = ""

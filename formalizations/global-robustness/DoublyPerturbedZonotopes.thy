@@ -507,23 +507,23 @@ preserve soundness, i.e. all points are in one of the two resulting zonotopes
 \<close>
 
 lemma input_split:
-  fixes c g1 g2 g3
+  fixes c1 c2 c3 g1 g2 g3
   defines "g1_new \<equiv> (g1/2)"
-  defines "c_new1 \<equiv> (c - g1_new)"
-  defines "c_new2 \<equiv> (c + g1_new)"
-  assumes "(x1, x2, (x1-x2)) \<in> (diffzono c c 0.0 [g1, g2, 0.0] [g1, 0.0, g3] [0.0, g2, (-g3)])"
+  defines "c_new1 \<equiv> (- g1_new)"
+  defines "c_new2 \<equiv> (g1_new)"
+  assumes "(x1, x2, (x1-x2)) \<in> (diffzono c1 c2 c3 [g1, g2, 0.0] [g1, 0.0, g3] [0.0, g2, (-g3)])"
   shows "
-    (x1, x2, (x1-x2)) \<in> (diffzono c_new1 c_new1 0.0 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, (-g3)])
+    (x1, x2, (x1-x2)) \<in> (diffzono (c1 + c_new1) (c2 + c_new1) c3 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, (-g3)])
     \<or>
-    (x1, x2, (x1-x2)) \<in> (diffzono c_new2 c_new2 0.0 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, (-g3)])"
+    (x1, x2, (x1-x2)) \<in> (diffzono (c1 + c_new2) (c2 + c_new2) c3 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, (-g3)])"
 proof -
   (* extract witness s from diffzono *)
   from assms
   obtain s where Len: "length s = 3"
     and Sbounds: "(\<forall> y \<in> set s. -1 \<le> y \<and> y \<le> 1)"
-    and Eqs: "(c + sum_list (map2 (*) s [g1,g2,0])) = x1
-             \<and> (c + sum_list (map2 (*) s [g1,0,g3])) = x2
-             \<and> (0 + sum_list (map2 (*) s [0,g2,-g3])) = x1 - x2"
+    and Eqs: "(c1 + sum_list (map2 (*) s [g1,g2,0])) = x1
+             \<and> (c2 + sum_list (map2 (*) s [g1,0,g3])) = x2
+             \<and> (c3 + sum_list (map2 (*) s [0,g2,-g3])) = x1 - x2"
     unfolding diffzono_def
     by force
   (* turn s (length 3) into explicit components *)
@@ -547,9 +547,9 @@ proof -
   hence Sbounds' : " -1 \<le> s1 \<and> s1 \<le> 1 \<and> -1 \<le> s2 \<and> s2 \<le> 1 \<and> -1 \<le> s3 \<and> s3 \<le> 1"
     using Sbounds by auto
 
-  have eq1: "c + s1*g1 + s2*g2 = x1"
-    and eq2: "c + s1*g1 + s3*g3 = x2"
-    and eq3: "s2*g2 - s3*g3 = x1 - x2"
+  have eq1: "c1 + s1*g1 + s2*g2 = x1"
+    and eq2: "c2 + s1*g1 + s3*g3 = x2"
+    and eq3: "c3 + s2*g2 - s3*g3 = x1 - x2"
     using Eqs S_def
     by auto
   (* split on sign of s1 *)
@@ -561,16 +561,16 @@ proof -
     have s1'_bounds: "-1 \<le> s1' \<and> s1' \<le> 1"
       using True Sbounds' unfolding s1'_def by auto
     (* check new equalities with center c_new1 = c - g1/2 and g1_new = g1/2 *)
-    have "c_new1 + s1'*g1_new + s2*g2 = x1"
+    have "c1 + c_new1 + s1'*g1_new + s2*g2 = x1"
       unfolding c_new1_def g1_new_def s1'_def
       using eq1 by (simp add: algebra_simps)
-    moreover have "c_new1 + s1'*g1_new + s3*g3 = x2"
+    moreover have "c2 + c_new1 + s1'*g1_new + s3*g3 = x2"
       unfolding c_new1_def g1_new_def s1'_def
       using eq2 by (simp add: algebra_simps)
-    moreover have "0 + s2*g2 - s3*g3 = x1 - x2"
+    moreover have "c3 + s2*g2 - s3*g3 = x1 - x2"
       using eq3 by simp
     ultimately have "(x1, x2, (x1-x2)) \<in>
-           diffzono c_new1 c_new1 0.0 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, - g3]"
+           diffzono (c1 + c_new1) (c2 + c_new1) c3 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, - g3]"
       unfolding diffzono_def
       apply simp
       apply (intro exI[where x="[s1', s2, s3]"])
@@ -585,16 +585,16 @@ proof -
     have s1'_bounds: "-1 \<le> s1' \<and> s1' \<le> 1"
       using False Sbounds' unfolding s1'_def by auto
     (* check equalities with center c_new2 = c + g1/2 *)
-    have "c_new2 + s1'*g1_new + s2*g2 = x1"
+    have "c1 + c_new2 + s1'*g1_new + s2*g2 = x1"
       unfolding c_new2_def g1_new_def s1'_def
       using eq1 by (simp add: algebra_simps)
-    moreover have "c_new2 + s1'*g1_new + s3*g3 = x2"
+    moreover have "c2 + c_new2 + s1'*g1_new + s3*g3 = x2"
       unfolding c_new2_def g1_new_def s1'_def
       using eq2 by (simp add: algebra_simps)
-    moreover have "0 + s2*g2 - s3*g3 = x1 - x2"
+    moreover have "c3 + s2*g2 - s3*g3 = x1 - x2"
       using eq3 by simp
     ultimately have "(x1, x2, (x1-x2)) \<in>
-           diffzono c_new2 c_new2 0.0 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, - g3]"
+           diffzono (c1 + c_new2) (c2 + c_new2) c3 [g1_new, g2, 0.0] [g1_new, 0.0, g3] [0.0, g2, - g3]"
       unfolding diffzono_def
       apply simp
       apply (intro exI[where x="[s1', s2, s3]"])
@@ -606,28 +606,28 @@ proof -
 qed
 
 lemma input_split2:
-  fixes c g1 g2 g3
+  fixes c1 c2 c3 g1 g2 g3
   defines "g2_new \<equiv> (g2/2)"
   defines "cd1 \<equiv> (- g2/2)"
   defines "cd2 \<equiv> ( (g2/2))"
-  assumes "(x1, x2, (x1-x2)) \<in> (diffzono c c 0.0 [g1, g2, 0.0] [g1, 0.0, g3] [0.0, g2, (-g3)])"
+  assumes "(x1, x2, (x1-x2)) \<in> (diffzono c1 c2 c3 [g1, g2, 0.0] [g1, 0.0, g3] [0.0, g2, (-g3)])"
   shows "
-    (x1, x2, (x1-x2)) \<in> (diffzono (c+cd1) c cd1 [g1, g2_new, 0.0] [g1, 0.0, g3] [0.0, g2_new, (-g3)])
+    (x1, x2, (x1-x2)) \<in> (diffzono (c1+cd1) c2 (c3 + cd1) [g1, g2_new, 0.0] [g1, 0.0, g3] [0.0, g2_new, (-g3)])
     \<or>
-    (x1, x2, (x1-x2)) \<in> (diffzono (c+cd2) c cd2 [g1, g2_new, 0.0] [g1, 0.0, g3] [0.0, g2_new, (-g3)])"
+    (x1, x2, (x1-x2)) \<in> (diffzono (c1+cd2) c2 (c3 + cd2) [g1, g2_new, 0.0] [g1, 0.0, g3] [0.0, g2_new, (-g3)])"
 proof -
   from assms
   obtain s where Len: "length s = 3"
   and Sbounds: "(\<forall> y \<in> set s. -1 \<le> y \<and> y \<le> 1)"
-  and Eqs: "diffzono_eval c c 0.0 [g1,g2,0] [g1,0,g3] [0,g2,-g3] s = (x1,x2,x1-x2)"
+  and Eqs: "diffzono_eval c1 c2 c3 [g1,g2,0] [g1,0,g3] [0,g2,-g3] s = (x1,x2,x1-x2)"
     unfolding diffzono_def
     apply simp
     using diffzono_eval_def numeral_3_eq_3 by force
   from Len obtain s1 s2 s3 where S_def: "s = [s1,s2,s3]"
     by (auto simp: length_3_conv)
-  have eqs1: "c + s1*g1 + s2*g2 = x1" 
-      and eqs2: "c + s1*g1 + s3*g3 = x2"
-      and eqs3: "s2*g2 - s3*g3 = x1 - x2"
+  have eqs1: "c1 + s1*g1 + s2*g2 = x1" 
+      and eqs2: "c2 + s1*g1 + s3*g3 = x2"
+      and eqs3: "c3 + s2*g2 - s3*g3 = x1 - x2"
     using Eqs S_def
     unfolding diffzono_eval_def
     by auto
@@ -639,13 +639,12 @@ proof -
     have Sbounds' : " -1 \<le> s1 \<and> s1 \<le> 1 \<and> -1 \<le> (s2+0.5)*2 \<and> (s2+0.5)*2 \<le> 1 \<and> -1 \<le> s3 \<and> s3 \<le> 1"
       using Sbounds S_def True
       by auto
-    have "(x1,x2,x1-x2) = diffzono_eval (c - g2/2) c (- g2/2) [g1,g2_new,0] [g1,0,g3] [0,g2_new,-g3] [s1,(s2+0.5)*2,s3]"
+    have "(x1,x2,x1-x2) = diffzono_eval (c1 - g2/2) c2 (c3 - g2/2) [g1,g2_new,0] [g1,0,g3] [0,g2_new,-g3] [s1,(s2+0.5)*2,s3]"
       unfolding diffzono_eval_def g2_new_def
       apply (auto simp: field_simps)
-      using eqs1 eqs2 eqs3
-      apply auto
-      using eqs1 apply force
-      by argo
+      using eqs1 apply argo
+      using eqs2 apply argo
+      using eqs3 by argo
       
     then show ?thesis
       unfolding diffzono_def diffzono_eval_def cd1_def
@@ -659,13 +658,12 @@ proof -
     have Sbounds' : " -1 \<le> s1 \<and> s1 \<le> 1 \<and> -1 \<le> (s2-0.5)*2 \<and> (s2-0.5)*2 \<le> 1 \<and> -1 \<le> s3 \<and> s3 \<le> 1"
       using Sbounds S_def False
       by auto
-    have "(x1,x2,x1-x2) = diffzono_eval (c + g2/2) c (g2/2) [g1,g2_new,0] [g1,0,g3] [0,g2_new,-g3] [s1,(s2-0.5)*2,s3]"
+    have "(x1,x2,x1-x2) = diffzono_eval (c1 + g2/2) c2 (c3 + g2/2) [g1,g2_new,0] [g1,0,g3] [0,g2_new,-g3] [s1,(s2-0.5)*2,s3]"
       unfolding diffzono_eval_def g2_new_def
       apply (auto simp: field_simps)
-      using eqs1 eqs2 eqs3
-      apply auto
-      using eqs1 apply force
-      by argo
+      using eqs1 apply argo
+      using eqs2 apply argo
+      using eqs3 by argo
       
     then show ?thesis
       unfolding diffzono_def diffzono_eval_def cd2_def
@@ -678,20 +676,20 @@ proof -
 qed
 
 lemma input_split3:
-  fixes c g1 g2 g3
+  fixes c1 c2 c3 g1 g2 g3
   defines "g3_new \<equiv> (g3/2)"
   defines "cd1 \<equiv> (- (g3/2))"
   defines "cd2 \<equiv> ( (g3/2))"
-  assumes "(x1, x2, (x1-x2)) \<in> (diffzono c c 0.0 [g1, g2, 0.0] [g1, 0.0, g3] [0.0, g2, (-g3)])"
+  assumes "(x1, x2, (x1-x2)) \<in> (diffzono c1 c2 c3 [g1, g2, 0.0] [g1, 0.0, g3] [0.0, g2, (-g3)])"
 shows "
-    (x1, x2, (x1-x2)) \<in> (diffzono c (c+cd1) (-cd1) [g1, g2, 0.0] [g1, 0.0, g3_new] [0.0, g2, (-g3_new)])
+    (x1, x2, (x1-x2)) \<in> (diffzono c1 (c2+cd1) (c3-cd1) [g1, g2, 0.0] [g1, 0.0, g3_new] [0.0, g2, (-g3_new)])
     \<or>
-    (x1, x2, (x1-x2)) \<in> (diffzono c (c+cd2) (-cd2) [g1, g2, 0.0] [g1, 0.0, g3_new] [0.0, g2, (-g3_new)])"
+    (x1, x2, (x1-x2)) \<in> (diffzono c1 (c2+cd2) (c3-cd2) [g1, g2, 0.0] [g1, 0.0, g3_new] [0.0, g2, (-g3_new)])"
 proof -
   from assms
   obtain s where Len: "length s = 3"
     and Sbounds: "(\<forall> y \<in> set s. -1 \<le> y \<and> y \<le> 1)"
-    and Eqs: "diffzono_eval c c 0.0 [g1,g2,0] [g1,0,g3] [0,g2,-g3] s = (x1,x2,x1-x2)"
+    and Eqs: "diffzono_eval c1 c2 c3 [g1,g2,0] [g1,0,g3] [0,g2,-g3] s = (x1,x2,x1-x2)"
     unfolding diffzono_def
     apply simp
     using diffzono_eval_def numeral_3_eq_3 by force
@@ -699,9 +697,9 @@ proof -
   from Len obtain s1 s2 s3 where S_def: "s = [s1,s2,s3]"
     by (auto simp: length_3_conv)
 
-  have eqs1: "c + s1*g1 + s2*g2 = x1"
-    and  eqs2: "c + s1*g1 + s3*g3 = x2"
-    and  eqs3: "s2*g2 - s3*g3 = x1 - x2"
+  have eqs1: "c1 + s1*g1 + s2*g2 = x1"
+    and  eqs2: "c2 + s1*g1 + s3*g3 = x2"
+    and  eqs3: "c3 + s2*g2 - s3*g3 = x1 - x2"
     using Eqs S_def
     unfolding diffzono_eval_def
     by auto
@@ -715,7 +713,7 @@ proof -
       by auto
 
     have "(x1,x2,x1-x2) =
-      diffzono_eval c (c - g3/2) ( g3/2)
+      diffzono_eval c1 (c2 - g3/2) (c3 + g3/2)
         [g1,g2,0] [g1,0,g3_new] [0,g2,-g3_new]
         [s1,s2,(s3+0.5)*2]"
       unfolding diffzono_eval_def g3_new_def
@@ -742,7 +740,7 @@ proof -
       by auto
 
     have "(x1,x2,x1-x2) =
-      diffzono_eval c (c + g3/2) (-g3/2)
+      diffzono_eval c1 (c2 + g3/2) (c3 -g3/2)
         [g1,g2,0] [g1,0,g3_new] [0,g2,-g3_new]
         [s1,s2,(s3-0.5)*2]"
       unfolding diffzono_eval_def g3_new_def

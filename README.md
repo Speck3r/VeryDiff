@@ -16,21 +16,30 @@ On the other hand, in some cases VeryDiff cannot be complete.
 However, VeryDiff always tries to find counterexamples and outputs them if found.
 
 ## Installation
-This software requires Julia 1.10.
+This software requires Julia.
+We recommend Julia 1.10, but 1.11 may also work.
 
-Subsequently the software can be installed as follows:
+The software can be installed as follows:
 
 ```
-git clone https://github.com/samysweb/VeryDiff-Release
-cd VeryDiff-Release
-./build.sh <path to julia binary>
+git clone https://github.com/samysweb/VeryDiff
+cd VeryDiff
+julia --project=. -e 'using Pkg; Pkg.add(url="https://github.com/samysweb/VNNLib.jl", rev="c6bf990"); Pkg.pin("VNNLib"); Pkg.resolve()'
+# The next line builds VeryDiff and may take approx. 20 minutes
+julia --project=. -e 'using Pkg; Pkg.build()'
 ```
 
-On Linux `<path to julia binary>` can be found via `$(which julia)`.
+Regarding the last line: It is currently necessary to explicitly install VNNLIB.jl from Github, as this package is not (yet) available in the Julia registry.
+
+By default VeryDiff requires Gurobi.  
+If you do not want to use Gurobi and/or do not have a Gurobi license, set [this line](https://github.com/samysweb/VeryDiff/blob/95811c272307a511130940fa9deaf7eb2c7a5787/src/VeryDiff.jl#L12) to `false`.  
+(This configuration option will be improved upon in future versions).
+
+If you have any issues running VeryDiff, please open an issue and/or contact us -- we are happy to help.
 
 ## Running the tool
 
-The binary of the tool can then be found in `./VeryDiff-Release/deps/VeryDiff/bin/VeryDiff`
+Once the build command has terminated, the binary of the tool can then be found in `./VeryDiff/deps/VeryDiff/bin/VeryDiff`
 
 Manual:
 ```

@@ -77,8 +77,18 @@ function __init__()
     # TODO: can we move auto_LiRPA into its place in alpha-beta-CROWN automatically?
     ABCROWN_PATH[] = artifact"alpha-beta-CROWN"
     AUTOLIRPA_PATH[] = artifact"auto_LiRPA"
-    pyimport("sys")."path".append(joinpath(ABCROWN_PATH[], "alpha-beta-CROWN-main"))
-    pyimport("sys")."path".append(joinpath(AUTOLIRPA_PATH[], "auto_LiRPA-master"))
+
+    # want to find first valid version of abCROWN or auto_LiRPA, even if we downloaded multiple ones.
+    # avoid using the hard-coded commit names in the statements below
+    get_inner(root) = joinpath(root, first(filter(x -> isdir(joinpath(root, x)), readdir(root))))
+    ABCROWN_PATH[] = get_inner(ABCROWN_PATH[])
+    AUTOLIRPA_PATH[] = get_inner(AUTOLIRPA_PATH[])
+    pyimport("sys")."path".append(ABCROWN_PATH[])
+    pyimport("sys")."path".append(AUTOLIRPA_PATH[])
+
+    # don't hard-code the commit names (here main and master)
+    #pyimport("sys")."path".append(joinpath(ABCROWN_PATH[], "alpha-beta-CROWN-main"))
+    #pyimport("sys")."path".append(joinpath(AUTOLIRPA_PATH[], "auto_LiRPA-master"))
     pyimport("sys")."path".append(PYTHON_SCRIPTS_DIR)
 end
 

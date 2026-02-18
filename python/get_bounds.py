@@ -24,6 +24,9 @@ torch.onnx.utils.GLOBALS.export_onnx_opset_version = 20
 torch.set_default_dtype(torch.float64)
 
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
+from auto_LiRPA import register_custom_op
+
+from gelu_relaxation import BoundGeluTight
 
 import argparse
 import warnings
@@ -86,7 +89,10 @@ def extract_input_shapes(onnx_model):
     return shape_dict
 
 
-def compute_pre_activation_bounds(onnx_path, bounds_path, output_name, outfile, method='alpha-crown', dtype=np.float64):
+def compute_pre_activation_bounds(onnx_path, bounds_path, output_name, outfile, method='alpha-crown', tight_gelu=True, dtype=np.float64):
+    if tight_gelu:
+        register_custom_op("onnx::Gelu", BoundGeluTight)
+
     # should already be the model with the error inputs
     onnx_model = onnx.load(onnx_path)
 
@@ -143,9 +149,11 @@ if __name__ == '__main__':
     parser.add_argument('input_file', type=str, help="Path to hdf5 file containing bounds for relevant inputs (unlisted inputs are assumed to be 0)")
     parser.add_argument('output_name', type=str, help="Name of onnx output to compute bounds for")
     parser.add_argument('--output_file', type=str, default="out_bounds.hdf5", help="File to store lower and upper bounds of output (default: out_bounds.hdf5)")
+    parser.add_argument('--tight_gelu', action='store_true', help="Use improved initialization of GeLU relaxation.")
     args = parser.parse_args()
 
-    compute_pre_activation_bounds(args.onnx_path, args.input_file, args.output_name, args.output_file, method='alpha-crown', dtype=np.float64)
+    compute_pre_activation_bounds(args.onnx_path, args.input_file, args.output_name, args.output_file, method='alpha-crown', 
+                                  tight_gelu=args.tight_gelu, dtype=np.float64)
 
     
 

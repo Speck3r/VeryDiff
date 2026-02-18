@@ -168,7 +168,7 @@ function approximate_polynomial_iterative(net::LayeredModel{S}, input_set, degre
         ẑ = layer_poly(ẑ, prop_state)
     end
 
-    return LayeredModel(layers_poly)   
+    return LayeredModel(layers_poly)
 end
 
 
@@ -215,8 +215,9 @@ kwargs:
     cheby - whether to use Chebyshev basis (true) or Monomial basis (false) for polynomial approximation
     max_iter - maximum number of iterations for Remez algorithm
     max_polys_per_layer - maximum number of different polynomials to use per layer
+    tight_gelu - use tight initialization of gelu relaxation
 """
-function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf, tight_gelu=true)
     ERROR_NODES_SCRIPT = pyimport("insert_error_nodes")
     BOUNDS_SCRIPT      = pyimport("get_bounds")
 
@@ -255,7 +256,7 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
 
             output_name = l.inputs[1]
             output_bounds = "out_bounds.h5"
-            BOUNDS_SCRIPT.compute_pre_activation_bounds(error_net_path, input_bounds_file, output_name; outfile=output_bounds, method="alpha-crown")
+            BOUNDS_SCRIPT.compute_pre_activation_bounds(error_net_path, input_bounds_file, output_name; outfile=output_bounds, method="alpha-crown", tight_gelu=tight_gelu)
             # run(`$ABCROWN_PYTHONPATH $(BOUNDS_SCRIPT) $(error_net_path) $(input_bounds_file) $(output_name) --output_file $(output_bounds)`)
 
             bounds = h5open(output_bounds, "r") do file 

@@ -79,11 +79,11 @@ function piecewise_poly_error(pp::GeLUPiecewisePoly{N,VN,VVN,FN}, p::AbstractVec
         # i.e. [l̂, û] ∩ [l, u] ≠ ∅
         l_intersect = max(l̂, l)
         u_intersect = min(û, u)
-        if l <= l_intersect && u_intersect <= u
+        if l_intersect <= u_intersect
             # convert p to the approximation domain of the polynomial piece
-            ps = chebyshev_coefficients(poly_candidate, l̂, û, degree)
+            ps = chebyshev_coefficients(poly_candidate, l̂, û, degree)
             
-            xs, ys = poly_error_cheby(q, ps, l̂, û)
+            xs, ys = poly_error_cheby(q, ps, l̂, û)
             xs = [x for x in xs if (l_intersect <= x && x <= u_intersect)]
             push!(xs_all, xs...)
         end

@@ -1,8 +1,5 @@
 # VeryDiff
 
-VeryDiff is a tool for the equivalence verification of neural networks (NNs).
-Given two NNs and a specification of an input region, it can answer the following question:
-
 **Do the two NNs behave *equivalently* on the given input space?**
 
 So far VeryDiff supports three different kinds of equivalence that can be checked for two NNs:
@@ -56,3 +53,33 @@ optional arguments:
                         verification)
   -h, --help            show this help message and exit
 ```
+
+## Polynomials
+
+```julia
+using VeryDiff, VNNLib
+using VeryDiff: approximate_polynomial_iterative
+
+model_file = "./test/examples/networks/mnist-net_256x4.onnx"
+net = load_network(model_file)
+
+lbs, ubs = zeros(784), ones(784)
+z = Zonotope(lbs, ubs)
+
+degree = 50
+net_poly = approximate_polynomial_iterative(net, z, degree, verbosity=1)
+
+```
+
+
+## Code Structure
+
+- `src`
+    - `Network.jl`: 
+        - Functionality for loading networks (also polynomial ones)
+        - executing networks on concrete inputs
+    - `Layers_Zonotope.jl`: executing individual networks with zonotopes (also polynomial ones)
+    - `Layers_DiffZonotope.jl`: executing differential network with zonotopes
+- `usage_examples.jl`: snippets of code for how to execute the algorithm
+VeryDiff is a tool for the equivalence verification of neural networks (NNs).
+Given two NNs and a specification of an input region, it can answer the following question:

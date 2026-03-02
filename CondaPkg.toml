@@ -1,0 +1,22 @@
+channels = ["pytorch", "conda-forge"]
+
+[deps]
+appdirs = ""
+onnx = ">=1.14,<1.20"  # to prevent onnx.helper has not attribute float32_to_bfloat16 error
+packaging = ""
+pip = ""
+scikit-learn = ""
+tqdm = ""
+h5py = ""
+sortedcontainers = ""
+torchvision = ""
+graphviz = ""
+python = "3.11.*"
+python-graphviz = ""
+pytorch = "==2.8.0"
+numpy = ""
+scipy = ""
+
+[pip.deps]
+onnx-graphsurgeon = ""
+onnx2pytorch = "@ git+https://github.com/phK3/onnx2pytorch.git@gelu-support"

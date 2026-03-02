@@ -146,9 +146,14 @@ end
 
 
 
-piecewise_params = load(joinpath(@__DIR__, "..", "..", "PolynomialEquivalenceNN", "gelu_piecewise_poly_sampled_degree_15.jld2"))["params"]
-gpp = make_piecewise_poly(piecewise_params)
-f_gpp = make_eval_gelu_piecewise_poly(gpp)
+# piecewise_params = load(joinpath(@__DIR__, "..", "..", "PolynomialEquivalenceNN", "gelu_piecewise_poly_sampled_degree_15.jld2"))["params"]
+# gpp = make_piecewise_poly(piecewise_params)
+f_gpp = VeryDiff.make_eval_gelu_piecewise_poly(VeryDiff.GELU_PP)
+
+
+l, u = -5., 5.
+xs = range(l, u, 200)
+degree = 10;
 
 
 plot(xs, f_gpp.(xs))
@@ -157,14 +162,54 @@ plot(xs, gelu.(xs) .- f_gpp.(xs))
 VeryDiff.ALMOST_ZERO_LEADING_COEFF_WARNING[] = false
 VeryDiff.ROOTS_ALMOST_ZERO_TOL[] = 1e-15
 p_cheby = VeryDiff.chebyshev_coefficients(gelu, l, u, degree)
-p_approx_pw, ϵ = VeryDiff.remez(f_gpp, (p, l, u) -> piecewise_poly_error(gpp, p, l, u), VeryDiff.poly_norm, l, u, degree, verbosity=1, max_iter=20)
+p_approx_pw, ϵ = VeryDiff.remez(f_gpp, (p, l, u) -> VeryDiff.piecewise_poly_error(VeryDiff.GELU_PP, p, l, u), VeryDiff.poly_norm, l, u, degree, verbosity=1, max_iter=20)
 
 f_cheby = VeryDiff.make_eval_chebyshev(p_cheby, l, u)
 f_pw = VeryDiff.make_eval_chebyshev(p_approx_pw, l, u);
 
 
-xs_err, ys_err = piecewise_poly_error(gpp, p_cheby, l, u);
+xs_err, ys_err = VeryDiff.piecewise_poly_error(VeryDiff.GELU_PP, p_cheby, l, u);
 
 plot(xs, gelu.(xs) .- f_cheby.(xs), label="cheby", framestyle=:origin)
 plot!(xs, gelu.(xs) .- f_pw.(xs), label="remez")
 scatter!(xs_err, ys_err, label="extrema")
+
+
+
+function eval_gelu_approx_radius(r, degree; max_iter=20)
+    l, u = -r, r 
+    xs = range(l, u, 1000)
+
+    p_cheby = VeryDiff.chebyshev_coefficients(gelu, l, u, degree)
+    p_approx_pw, ϵ = VeryDiff.remez(f_gpp, (p, l, u) -> VeryDiff.piecewise_poly_error(VeryDiff.GELU_PP, p, l, u), VeryDiff.poly_norm, l, u, degree, verbosity=0, max_iter=max_iter)
+    f_cheby = VeryDiff.make_eval_chebyshev(p_cheby, l, u)
+    f_pw = VeryDiff.make_eval_chebyshev(p_approx_pw, l, u);
+
+    xs_err, ys_err = VeryDiff.piecewise_poly_error(VeryDiff.GELU_PP, p_cheby, l, u)
+
+    sampled_err_remez = maximum(abs.(gelu.(xs) .- f_pw.(xs)))
+    sampled_err_cheby = maximum(abs.(gelu.(xs) .- f_cheby.(xs)))
+    # computed_err_remez= maximum(abs.(ys_err))
+    computed_err_remez = ϵ
+
+    return sampled_err_cheby, sampled_err_remez, computed_err_remez
+end
+
+degree = 50
+radii = range(1, 100, 100)
+sampled_errs_cheby = []
+sampled_errs_remez = []
+computed_errs_remez = []
+for r in radii
+    sampled_err_cheby, sampled_err_remez, computed_err_remez = eval_gelu_approx_radius(r, degree)
+    push!(sampled_errs_cheby, sampled_err_cheby)
+    push!(sampled_errs_remez, sampled_err_remez)
+    push!(computed_errs_remez, computed_err_remez)
+end
+
+plot(radii, sampled_errs_cheby, label="cheby", yscale=:log10)
+plot!(radii, sampled_errs_remez, label="remez sampled")
+plot!(radii, computed_errs_remez, label="remez computed")
+
+
+

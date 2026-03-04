@@ -1,4 +1,8 @@
 
+# TODO: What to do about polynomial approximation via zonotope bounds?
+#       Currently commented out, because difficult to run zonos on a single NN in new VeryDiff.
+
+
 """
 For each layer in the network, compute the interval bounds after that layer was applied.
 
@@ -10,21 +14,21 @@ returns:
     bounds - list of (n_neurons x 2)-array for each layer holding lower and upper bounds for each neuron 
              after that layer was applied
 """
-function get_zono_bounds(net::LayeredModel, input_set::Zonotope)
-    bounds = []
+# function get_zono_bounds(net::LayeredModel, input_set::Zonotope)
+#     bounds = []
     
-    prop_state = PropState(true)
-    for i in 1:length(net.layers)
-        layers = net.layers[1:i]
-        net_partial = LayeredModel(layers)
+#     prop_state = PropState(true)
+#     for i in 1:length(net.layers)
+#         layers = net.layers[1:i]
+#         net_partial = LayeredModel(layers)
 
-        ẑ = net_partial(input_set, prop_state)
-        bounds_layer = zono_bounds(ẑ)
-        push!(bounds, bounds_layer)
-    end
+#         ẑ = net_partial(input_set, prop_state)
+#         bounds_layer = zono_bounds(ẑ)
+#         push!(bounds, bounds_layer)
+#     end
 
-    return bounds
-end
+#     return bounds
+# end
 
 
 function approximate_polynomial(L::OXP.ONNXLinear, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
@@ -121,14 +125,14 @@ function approximate_polynomial(L::OXP.ONNXFlatten, bounds, degree; cheby=true, 
 end
 
 
-function approximate_polynomial(net::LayeredModel, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
-    # attention: bounds are bounds AFTER the layer
-    # for ReLU layers, we need the bound after the linear layer before that, the linear layers don't need any bounds
-    bounds = [[[]]; bounds[1:end-1]]
-    layers = map(x -> approximate_polynomial(x[1], x[2], degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)[1],
-                 zip(net.layers, bounds))
-    return LayeredModel(layers)
-end
+# function approximate_polynomial(net::LayeredModel, bounds::AbstractVector, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+#     # attention: bounds are bounds AFTER the layer
+#     # for ReLU layers, we need the bound after the linear layer before that, the linear layers don't need any bounds
+#     bounds = [[[]]; bounds[1:end-1]]
+#     layers = map(x -> approximate_polynomial(x[1], x[2], degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)[1],
+#                  zip(net.layers, bounds))
+#     return LayeredModel(layers)
+# end
 
 
 """
@@ -147,29 +151,29 @@ kwargs:
     max_iter - maximum number of iterations for Remez algorithm
     max_polys_per_layer - maximum number of different polynomials to use per layer
 """
-function approximate_polynomial_iterative(net::LayeredModel{S}, input_set, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
-    @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
-    prop_state = PropState(true)
-    layers_poly = Vector{OXP.Node{S}}()
-    ẑ = input_set
-    for i in 1:length(net.layers)
-        bounds_layer = zono_bounds(ẑ)
+# function approximate_polynomial_iterative(net::LayeredModel{S}, input_set, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
+#     @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
+#     prop_state = PropState(true)
+#     layers_poly = Vector{OXP.Node{S}}()
+#     ẑ = input_set
+#     for i in 1:length(net.layers)
+#         bounds_layer = zono_bounds(ẑ)
 
-        verbosity > 0 && println("--- layer $i ---")
-        verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
-        verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
-        !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
-        !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
+#         verbosity > 0 && println("--- layer $i ---")
+#         verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
+#         verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
+#         !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
+#         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
 
-        layer = net.layers[i]
-        layer_poly, ϵs = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
-        push!(layers_poly, layer_poly)
+#         layer = net.layers[i]
+#         layer_poly, ϵs = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+#         push!(layers_poly, layer_poly)
 
-        ẑ = layer_poly(ẑ, prop_state)
-    end
+#         ẑ = layer_poly(ẑ, prop_state)
+#     end
 
-    return LayeredModel(layers_poly)
-end
+#     return LayeredModel(layers_poly)
+# end
 
 
 function approximate_polynomial_iterative_sampling(net::LayeredModel{S}, X_in::AbstractVector, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S

@@ -6,8 +6,11 @@ using Statistics
 using VNNLib
 using VNNLib.OnnxParser: Node, ONNXLinear, ONNXRelu, ONNXAddConst
 
+const OXP = VNNLib.OnnxParser
+
 using VeryDiff
 
+include("ONNXNodes.jl")
 include("Network.jl")
 include("SortedVector.jl")
 include("AbstractDomains.jl")
@@ -16,6 +19,7 @@ include("PropState.jl")
 include("Zonotope.jl")
 
 export Network,GeminiNetwork,Layer,ZeroDense,DiffLayer, get_input_indices, get_zonos_at_pos, executable_network
+export ONNXPoly, ONNXMonomialPoly, ONNXChebyshevPoly, extract_approximation_domain
 export Zonotope,DiffZonotope,BoundsCache,CachedZonotope,ZonotopeStorage
 export resize_zonotope_storage!
 export VerificationTask, PropState, reset_ps!, first_pass, get_zonotope, get_layer, get_zonotope!, get_free_generator_id!

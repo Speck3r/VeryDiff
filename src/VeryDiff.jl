@@ -98,6 +98,16 @@ const FIRST_ROUND = Ref{Bool}(true)
 
 include("Util/simd_bool.jl")
 include("Debugger/Debugger.jl")
+
+# new ONNX nodes for polynomials in Definitions.jl need chebyshev info
+include("polynomials/chebyshev/Chebyshev.jl")
+include("polynomials/chebyshev/chebyshev_interface.jl")
+include("polynomials/PiecewisePolynomials.jl")
+const GELU_PP = load_piecewise_poly(joinpath(@__DIR__, "..", "resources", "gelu_piecewise_poly_sampled_degree_15.jld2"))
+
+include("polynomials/Remez.jl")
+include("polynomials/PolynomialDifferenceRelaxation.jl")
+
 include("Definitions/Definitions.jl")
 using .Definitions
 
@@ -108,34 +118,24 @@ using JuMP
 
 const GRB_ENV = Ref{Any}(nothing)
 
+# include("polynomials/ApproximateNetworkPoly.jl")
 
-include("chebyshev/Chebyshev.jl")
-include("chebyshev/chebyshev_interface.jl")
+# TODO: do we need those? Should already be defined in Definitions except for load_polynomial_network, but we don't need that anymore
+#include("network/layered_network.jl")
+#include("network/gemini_network.jl")
+#include("network/load_polynomial_network.jl")
 
-include("network/ONNXNodes.jl")
-include("network/layered_network.jl")
-include("network/gemini_network.jl")
-include("network/load_polynomial_network.jl")
+# TODO: zonotope implementation of old VeryDiff version
+#include("Layers_Zonotope.jl")
+#include("Layers_DiffZonotope.jl")
 
-include("Definitions.jl")
-# include("Network.jl")
-include("Util.jl")
-include("Zonotope.jl")
-include("PiecewisePolynomials.jl")
-
-const GELU_PP = load_piecewise_poly(joinpath(@__DIR__, "..", "resources", "gelu_piecewise_poly_sampled_degree_15.jld2"))
-
-include("Remez.jl")
-include("PolynomialDifferenceRelaxation.jl")
-include("Layers_Zonotope.jl")
-include("Layers_DiffZonotope.jl")
 include("MultiThreadding.jl")
 
 include("Properties/Properties.jl")
 using .Properties
 
 include("Verifier.jl")
-include("ApproximateNetworkPoly.jl")
+
 
 # command line interface
 include("Cli.jl")

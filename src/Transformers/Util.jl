@@ -84,6 +84,26 @@ function get_selectors(bounds₁, bounds₂, ∂bounds)
     )
 end
 
+"""
+Given lower and upper bounds for x ∈ [l, u], returns masks 
+
+neg = true iff always x ≤ 0
+pos = true iff always x ≥ 0
+unstable = true iff l < 0 < u
+"""
+function relu_stability_mask(l, u)
+    check = falses(length(l))
+    neg = (u .<= 0.) .&& .!check
+    check .|= neg
+    pos = (l .>= 0) .&& .!check 
+    check .|= pos 
+    unstable = (l .< 0) .&& (u .> 0) .&& .!check 
+    check .|= unstable
+    @assert all(check) "Not all cases covered!"
+
+    return neg, pos, unstable
+end
+
 function init_relu_zonotope(PS :: PropState, input_zono_cache :: CachedZonotope, input_zono :: Zonotope, new_generators :: Int64, layer_idx :: Int64)
     # Compute new generators
     generators = Matrix{Float64}[]

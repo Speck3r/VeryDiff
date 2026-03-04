@@ -98,6 +98,101 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXRelu{S1}, ONNX
     PS.zono_storage.zonotopes[output_positions[1]] = Z
 end
 
+
+function init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS::PropState, diff_layer, output_positions::Vector{Int64})
+    # it's called init_relu_zonotope, but really it is applicable to all activation functions
+    Z₁ = init_relu_zonotope(PS, input_zono_cache, input_zono.Z₁, new_gen₁, diff_layer.layer_idx)
+    Z₂ = init_relu_zonotope(PS, input_zono_cache, input_zono.Z₂, new_gen₂, diff_layer.layer_idx)
+    generators_d = Matrix{Float64}[]
+    # Three way merge of generators: All generators from ∂Z + all from new Z₁ + all from new Z₂
+    # First build union of generator ids
+    generator_ids = union(input_zono.∂Z.generator_ids, union(Z₁.generator_ids, Z₂.generator_ids))
+    owned_generator_id = nothing
+    if diff_layer.layer_idx == input_zono_cache.first_usage && !isnothing(input_zono.∂Z.owned_generators)
+        owned_generator_id = input_zono.∂Z.generator_ids[input_zono.∂Z.owned_generators]
+    end
+    # Now iterate over generator ids and figure out where the generators come from
+    # Prefer Z₁ and Z₂ over ∂Z when there are overlaps because those might have new generators
+    for gid in generator_ids
+        if gid in Z₂.generator_ids
+            idx = find_index_position(Z₂.generator_ids, gid)
+            new_g = zeros(size(Z₂.Gs[idx],1), size(Z₂.Gs[idx],2))
+            push!(generators_d, new_g)
+        elseif gid in Z₁.generator_ids
+            idx = find_index_position(Z₁.generator_ids, gid)
+            new_g = zeros(size(Z₁.Gs[idx],1), size(Z₁.Gs[idx],2))
+            push!(generators_d, new_g)
+        else
+            idx = find_index_position(input_zono.∂Z.generator_ids, gid)
+            columns = size(input_zono.∂Z.Gs[idx],2)
+            if gid == owned_generator_id
+                columns += ∂new_gen
+            end
+            new_g = zeros(size(input_zono.∂Z.Gs[idx],1), columns)
+            push!(generators_d, new_g)
+        end
+    end
+    if isnothing(owned_generator_id)
+        owned_generator_id = get_free_generator_id!(PS)
+        new_g = zeros(Float64, size(input_zono.∂Z.c,1), ∂new_gen)
+        push!(generators_d, new_g)
+        push!(generator_ids, owned_generator_id)
+    end
+    c = zeros(Float64, size(Z₂.c,1))
+    ∂Z = Zonotope(generators_d, c, input_zono.∂Z.influence, generator_ids, find_index_position(generator_ids, owned_generator_id))
+    @assert isnothing(input_zono.∂Z.influence) "Activation DiffLayer does not support influenced zonotopes (yet?)"
+    Z = CachedZonotope(
+            DiffZonotope(
+                Z₁,
+                Z₂,
+                ∂Z
+            ),
+            nothing
+        )
+    init_default_zono(Z)
+    PS.zono_storage.zonotopes[output_positions[1]] = Z
+end
+
+
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXPoly{S1}, ONNXRelu{S2}, ONNXRelu{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+    @assert length(inputs) == 1 "Poly-ReLU DiffLayer should have exactly one input"
+    @assert length(output_positions) == 1 "Poly-ReLU DiffLayer should have exactly one output"
+    input_zono_cache = inputs[1]
+    input_zono = get_zonotope(input_zono_cache)
+    # Compute Bounds
+    bounds₁ = zono_bounds(input_zono.Z₁)
+    bounds₂ = zono_bounds(input_zono.Z₂)
+    ∂bounds = zono_bounds(input_zono.∂Z)
+    neg, pos, unstable = relu_stability_mask(bounds₂[:,1], bounds₂[:,2])
+
+    # TODO: we can first check islinear(p) for each polynomial and only add generators for the non-linear ones
+    new_gen₁ = size(bounds₁, 1)
+    new_gen₂ = count(unstable)
+    # for neg, we don't need new generators, we can just pass through the zonotope for the polynomial network
+    ∂new_gen = count(pos) + count(unstable)
+
+    init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions)
+end
+
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXPoly{S1}, ONNXGelu{S2}, ONNXGelu{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+    @assert length(inputs) == 1 "Poly-Gelu DiffLayer should have exactly one input"
+    @assert length(output_positions) == 1 "Poly-Gelu DiffLayer should have exactly one output"
+    input_zono_cache = inputs[1]
+    input_zono = get_zonotope(input_zono_cache)
+    # Compute Bounds
+    bounds₁ = zono_bounds(input_zono.Z₁)
+    bounds₂ = zono_bounds(input_zono.Z₂)
+    ∂bounds = zono_bounds(input_zono.∂Z)
+
+    # Gelu is non-linear, so we always need a new generator
+    new_gen₁ = size(bounds₁, 1)
+    new_gen₂ = size(bounds₂, 1)
+    ∂new_gen = size(∂bounds, 1)
+
+    init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions)
+end
+
+
 function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXLinear{S1}, ZeroDense{S2}, ONNXLinear{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
     @assert length(inputs) == 1 "Dense DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "Dense DiffLayer should have exactly one output"

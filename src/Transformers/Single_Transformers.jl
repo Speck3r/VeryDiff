@@ -93,3 +93,59 @@ function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXRelu{S}, Zin :: Zonotop
         A[row, (generator_offset + i)] = abs(γ[row])
     end
 end
+
+
+function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXPoly{S}, inputs :: Vector{Zonotope}; lower=nothing, upper=nothing) where {S}
+    @assert length(inputs) == 1 "Poly layer should have exactly one input"
+    @assert length(ZoutRefVec) == 1 "Poly layer should have exactly one output"
+    ZoutRef = ZoutRefVec[1]
+    Zin = inputs[1]
+    return propagate_layer!(ZoutRef, L, Zin; lower=lower, upper=upper)
+end
+
+function propagate_layer!(ZoutRef :: Zonotope, L :: Union{ONNXPoly{S}, ONNXGelu{S}}, Zin :: Zonotope; lower=nothing, upper=nothing) where {S}
+    # TODO: use bounds stored in the layer for tightening
+    if isnothing(lower) || isnothing(upper)
+        bounds = zono_bounds(Zin)
+        lower = @view bounds[:,1]
+        upper = @view bounds[:,2]
+    end
+
+    λ, β, γ = get_linear_relaxation(L, lower, upper)
+
+    ZoutRef.c .= λ .* Zin.c .+ β
+
+    new_gens = size(lower, 1)
+
+    indices = intersect_indices(ZoutRef.generator_ids, Zin.generator_ids)
+    if VeryDiff.NEW_HEURISTIC[]
+        influence_new = ZoutRef.influence
+        column_pos = size(influence_new[ZoutRef.owned_generators],2) - new_gens + 1
+        # @debug "Adding $new_gens new columns at position $column_pos to influence matrix of owned generator ID $(ZoutRef.generator_ids[ZoutRef.owned_generators])"
+        # @debug "Sizes of influence matrices: $([size(inf) for inf in Zin.influence])"
+        # Other influence matrices remain the same
+        # Only need to update the owned generator influence matrix
+        if !isnothing(Zin.owned_generators) && Zin.owned_generators == attempt_find_index_position(Zin.generator_ids, ZoutRef.generator_ids[ZoutRef.owned_generators])
+            influence_new[ZoutRef.owned_generators][:, 1:column_pos-1] .= Zin.influence[Zin.owned_generators]
+        end
+        # @debug "Size of owned influence matrix after copy: $(size(influence_new[ZoutRef.owned_generators]))"
+        influence_new[ZoutRef.owned_generators][:,column_pos:end] .= 0.0
+        bounds_range = upper[crossing] .- lower[crossing]
+        @inbounds for (idx, g) in enumerate(Zin.Gs)
+            influence_new[ZoutRef.owned_generators][:,column_pos:end] .+= Zin.influence[idx] * abs.((@view g[crossing,:]) ./ bounds_range)'
+        end
+    else
+        influence_new = Zin.influence
+    end
+
+    updateGeneratorsMul!(ZoutRef.Gs, indices, Zin.Gs, λ, :)
+
+    # fill number of new_gens columns with all 0, 
+    # then add the error term to the diagonal of these columns
+    ZoutRef.Gs[ZoutRef.owned_generators][:,(end-new_gens+1):end] .= 0.0
+    generator_offset = size(ZoutRef.Gs[ZoutRef.owned_generators],2) - new_gens
+    A = ZoutRef.Gs[ZoutRef.owned_generators]
+    @inbounds for (i, row) in enumerate(findall(crossing))
+        A[row, (generator_offset + i)] = abs(γ[row])
+    end
+end

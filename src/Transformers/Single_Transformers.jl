@@ -1,3 +1,14 @@
+
+"""
+    `propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXLinear{S1}, inputs :: Vector{Zonotope}) where {S1}`
+
+    Propagates the input zonotopes through a linear layer and updates the output zonotopes in-place with the result. 
+
+    args:
+    - `ZoutRefVec`: A vector of output zonotope references to be updated. For a linear layer, this should contain exactly one zonotope reference.
+    - `L`: The linear layer 
+    - `inputs`: A vector of input zonotopes. For a linear layer, this should contain exactly one zonotope.
+"""
 function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXLinear{S1}, inputs :: Vector{Zonotope}) where {S1}
     @assert length(inputs) == 1 "Dense layer should have exactly one input"
     @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output"

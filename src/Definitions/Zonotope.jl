@@ -21,6 +21,19 @@ end
 @inline function updateGenerators!(outGs :: Vector{<:AbstractMatrix{Float64}}, indices :: SortedVector{Int}, inGs::Vector{<:AbstractMatrix{Float64}}, rows :: BitVector)
     @generatorUpdateLoop(:(.=), outGs, indices, inGs, rows)
 end
+
+"""
+    `updateGeneratorsMul!(outGs, indices, inGs, muls, rows)`
+
+    Stores outGs[indices[i]][rows,:] = (inGs[i][rows,:] .* muls) 
+    
+    args:
+    - `outGs`: Vector of output generator matrices 
+    - `indices`: SortedVector of indices corresponding to the generator matrices to update
+    - `inGs`: Vector of input generator matrices to use for the update
+    - `muls`: Vector of multipliers to apply to the input generator rows before storing
+    - `rows`: Mask indicating which rows to update
+"""
 @inline function updateGeneratorsMul!(outGs :: Vector{<:AbstractMatrix{Float64}}, indices :: SortedVector{Int}, inGs::Vector{<:AbstractMatrix{Float64}}, muls :: Union{Float64,Vector{Float64}}, rows :: Union{BitVector,Colon})
     @generatorUpdateLoop(:(.=), outGs, indices, inGs, rows, muls)
 end

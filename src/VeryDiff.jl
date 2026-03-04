@@ -118,7 +118,7 @@ using JuMP
 
 const GRB_ENV = Ref{Any}(nothing)
 
-# include("polynomials/ApproximateNetworkPoly.jl")
+include("polynomials/ApproximateNetworkPoly.jl")
 
 # TODO: do we need those? Should already be defined in Definitions except for load_polynomial_network, but we don't need that anymore
 #include("network/layered_network.jl")

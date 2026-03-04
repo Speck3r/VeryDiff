@@ -176,14 +176,25 @@ kwargs:
 # end
 
 
-function approximate_polynomial_iterative_sampling(net::LayeredModel{S}, X_in::AbstractVector, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
+function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::AbstractVector, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
     @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
     layers_poly = Vector{OXP.Node{S}}()
-    ys_layer = X_in 
-    Y_layer = hcat(ys_layer...)'
-    for i in 1:length(net.layers)
-        lb_layer = minimum(Y_layer, dims=1)'
-        ub_layer = maximum(Y_layer, dims=1)' 
+
+    net_layers, io_map = Definitions.sort_network(net)
+
+    output_data = Dict{S, AbstractArray}()
+    output_data[OXP.get_input_names(net)[1]] = X_in
+
+    for l in net_layers
+        inputs = OXP.collect_inputs(net, l.node.name, output_data)
+
+        @assert length(inputs) == 1 "Currently only single input layers are supported for sampling-based approximation"
+        ys_layer = inputs[1]
+        Y_layer = vcat(ys_layer...)
+
+        # TODO: need to change this for e.g. conv layer!!!
+        lb_layer = vec(minimum(Y_layer, dims=1))
+        ub_layer = vec(maximum(Y_layer, dims=1))
         bounds_layer = hcat(lb_layer, ub_layer)
 
         verbosity > 0 && println("--- layer $i ---")
@@ -192,16 +203,23 @@ function approximate_polynomial_iterative_sampling(net::LayeredModel{S}, X_in::A
         !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
 
-        layer = net.layers[i]
-        layer_poly, ϵs = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+        layer_poly, ϵs = approximate_polynomial(l.node, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
         push!(layers_poly, layer_poly)
 
-        # TODO: can flux evaluate this in batch mode?
-        ys_layer = [OXP.onnx_node_to_flux_layer(layer_poly)(y) for y in ys_layer]
-        Y_layer = hcat(ys_layer...)'
+        outputs = [OXP.onnx_node_to_flux_layer(layer_poly)(y) for y in ys_layer]
+        out_names = net.nodes[layer_poly.name].outputs
+        @assert length(out_names) == 1 "Currently only single output layers are supported for sampling-based approximation"
+        output_data[out_names[1]] = outputs
     end
 
-    return LayeredModel(layers_poly)   
+    model = deepcopy(net)
+    # need to return a full OnnxNet here for later steps, but replace the original nodes with the polynomial approximations.
+    # structure of the model did not change, so we can just update model.nodes
+    for layer_poly in layers_poly
+        model.nodes[layer_poly.name] = layer_poly
+    end
+
+    return model
 end
 
 
@@ -227,7 +245,7 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
 
     # load model in julia
     model = load_onnx_model(onnx_path)
-    lmodel = to_layered_model(model)
+    net_layers, io_map = Definitions.sort_network(model)
 
     # extend network by error inputs
     error_net_path = "error_net.onnx"
@@ -240,8 +258,8 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
     layer_bounds = []
     layers_poly = Vector{OXP.Node}()
 
-    for (i, l) in enumerate(lmodel.layers)
-        if (l isa OXP.ONNXRelu) || (l isa OXP.ONNXGelu)
+    for (i, l) in enumerate(net_layers)
+        if (l.node isa OXP.ONNXRelu) || (l.node isa OXP.ONNXGelu)
             # prepare input bounds
             h5open(input_bounds_file, "w") do file 
                 for (k, v) in model.input_shapes
@@ -253,12 +271,14 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
                 end
 
                 for (l, ϵs) in zip(activations_considered, error_magnitudes)
-                    error_name = "eps_" * l.name
+                    error_name = "eps_" * l.node.name
                     file[error_name] = reshape(ϵs, :, 1)  # append a batch dimension
                 end
             end
 
-            output_name = l.inputs[1]
+            output_names = l.node.inputs
+            @assert length(output_names) == 1 "Currently only single output activation layers are supported for alpha-beta-CROWN-based approximation"
+            output_name = output_names[1]
             output_bounds = "out_bounds.h5"
             BOUNDS_SCRIPT.compute_pre_activation_bounds(error_net_path, input_bounds_file, output_name; outfile=output_bounds, method="alpha-crown", tight_gelu=tight_gelu)
             # run(`$ABCROWN_PYTHONPATH $(BOUNDS_SCRIPT) $(error_net_path) $(input_bounds_file) $(output_name) --output_file $(output_bounds)`)
@@ -268,7 +288,7 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
             end
 
             # ϵs = compute_approximation_errors(bounds, ϵ=0.05)
-            layer_poly, ϵs = VeryDiff.approximate_polynomial(l, bounds, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+            layer_poly, ϵs = VeryDiff.approximate_polynomial(l.node, bounds, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
 
             push!(activations_considered, l)
             push!(error_magnitudes, ϵs)
@@ -280,11 +300,19 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
             !all(isfinite.(bounds)) && println("lb non-finite: ", (1:size(bounds,1))[.~isfinite.(bounds[:,1])])
             !all(isfinite.(bounds)) && println("ub non-finite: ", (1:size(bounds,1))[.~isfinite.(bounds[:,2])])
         else
-            layer_poly = l
+            layer_poly = l.node
         end
         push!(layers_poly, layer_poly)
     end
 
     # need to do [l for l in layers_poly] to convert from OXP.Node without information about identifier type to OXP.Node{S}
-    return LayeredModel([l for l in layers_poly])
+    # return LayeredModel([l for l in layers_poly])
+
+    # need to return a full OnnxNet here for later steps, but replace the original nodes with the polynomial approximations.
+    # structure of the model did not change, so we can just update model.nodes
+    for layer_poly in layers_poly
+        model.nodes[layer_poly.name] = layer_poly
+    end
+
+    return model
 end

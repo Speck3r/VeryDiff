@@ -9,6 +9,7 @@ using VNNLib.OnnxParser: Node, ONNXLinear, ONNXRelu, ONNXAddConst
 const OXP = VNNLib.OnnxParser
 
 using VeryDiff
+using VeryDiff: clenshaw_chebyshev
 
 include("ONNXNodes.jl")
 include("Network.jl")

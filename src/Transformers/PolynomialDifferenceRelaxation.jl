@@ -280,3 +280,22 @@ function find_good_poly_diff_approx(lx, ux, lΔ, uΔ, ps, a=0., b=0.; alg=Nelder
 
     return a_best[1], a_best[2], c, ϵ
 end
+
+
+function find_good_poly_diff_approx(L::ONNXMonomialPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=0, b=0)
+    options = Optim.Options(iterations=OPTIM_ITERS[], show_trace=true)
+    find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], 
+                                ∂lower[selector], ∂upper[selector], 
+                                eachrow(L.coeffs[selector,:]), 
+                                a[selector], b[selector], options=options)
+end
+
+
+function find_good_poly_diff_approx(L::ONNXChebyshevPoly, selector::AbstractVector, lower₁, upper₁, ∂lower, ∂upper, a=zero(lower₁), b=zero(lower₂))
+    # TODO: can't have a=0, b=0 as initialization if we use a[...] later on
+    options = Optim.Options(iterations=OPTIM_ITERS[])
+    find_good_poly_diff_approx.(lower₁[selector], upper₁[selector], 
+                                ∂lower[selector], ∂upper[selector], 
+                                ChebyshevPolynomial.(eachrow(L.coeffs[selector,:]), L.l[selector], L.u[selector]), 
+                                a[selector], b[selector], options=options)
+end

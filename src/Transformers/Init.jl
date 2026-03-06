@@ -99,7 +99,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXRelu{S1}, ONNX
 end
 
 
-function init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS::PropState, diff_layer, output_positions::Vector{Int64})
+function init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS::PropState, diff_layer, output_positions::Vector{Int64}, input_zono, input_zono_cache)
     # it's called init_relu_zonotope, but really it is applicable to all activation functions
     Z₁ = init_relu_zonotope(PS, input_zono_cache, input_zono.Z₁, new_gen₁, diff_layer.layer_idx)
     Z₂ = init_relu_zonotope(PS, input_zono_cache, input_zono.Z₂, new_gen₂, diff_layer.layer_idx)
@@ -171,10 +171,10 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXPoly,<:ONNXP
     # for neg, we don't need new generators, we can just pass through the zonotope for the polynomial network
     ∂new_gen = count(pos) + count(unstable)
 
-    init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions)
+    init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions, input_zono, input_zono_cache)
 end
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXPoly{S1}, ONNXGelu{S2}, ONNXGelu{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXPoly,<:ONNXPoly,<:ONNXGelu}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
     @assert length(inputs) == 1 "Poly-Gelu DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "Poly-Gelu DiffLayer should have exactly one output"
     input_zono_cache = inputs[1]
@@ -189,7 +189,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXPoly{S1}, ONNX
     new_gen₂ = size(bounds₂, 1)
     ∂new_gen = size(∂bounds, 1)
 
-    init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions)
+    init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions, input_zono, input_zono_cache)
 end
 
 

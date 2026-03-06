@@ -18,6 +18,7 @@ include("AbstractDomains.jl")
 include("DataStructures.jl")
 include("PropState.jl")
 include("Zonotope.jl")
+include("PolyBoundsCache.jl")
 
 export Network,GeminiNetwork,Layer,ZeroDense,DiffLayer, get_input_indices, get_zonos_at_pos, executable_network
 export ONNXPoly, ONNXMonomialPoly, ONNXChebyshevPoly, extract_approximation_domain
@@ -29,5 +30,6 @@ export parse_network, get_layers, get_inputs, get_outputs, get_layer1, get_diff_
 export configure_first_usage!, prepare_prop_state!, zonos_initialized
 export updateGenerators!, updateGeneratorsMul!, updateGeneratorsAdd!, updateGeneratorsAddMul!, updateGeneratorsSub!, updateGeneratorsSubMul!
 export zono_optimize, zono_bounds, zono_get_max_vector
+export init_bounds_cache_approximation_domain!
 
 end

@@ -100,13 +100,14 @@ include("Util/simd_bool.jl")
 include("Debugger/Debugger.jl")
 
 # new ONNX nodes for polynomials in Definitions.jl need chebyshev info
+include("polynomials/Util.jl")
 include("polynomials/chebyshev/Chebyshev.jl")
 include("polynomials/chebyshev/chebyshev_interface.jl")
 include("polynomials/PiecewisePolynomials.jl")
 const GELU_PP = load_piecewise_poly(joinpath(@__DIR__, "..", "resources", "gelu_piecewise_poly_sampled_degree_15.jld2"))
 
 include("polynomials/Remez.jl")
-include("polynomials/PolynomialDifferenceRelaxation.jl")
+# include("polynomials/PolynomialDifferenceRelaxation.jl")
 
 include("Definitions/Definitions.jl")
 using .Definitions

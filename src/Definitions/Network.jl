@@ -123,55 +123,58 @@ end
 struct GeminiNetwork{LayerIdT}
     inputs :: Dict{LayerIdT, Int64}
     diff_layers :: Vector{DiffLayer}
-    function GeminiNetwork(network1 :: OnnxNet{LayerIdT,NShapeIn, NShapeOut}, network2 :: OnnxNet{LayerIdT,NShapeIn, NShapeOut}) where {LayerIdT,NShapeIn,NShapeOut}
-        n1_layers, io_map = sort_network(network1)
-        n2_layers = sort_mirror_network(n1_layers, io_map, network2)
-        diff_layers = DiffLayer[]
-        if length(n1_layers) > length(n2_layers)
-            n1_layers = cleanup_network(network1)
-        elseif length(n2_layers) > length(n1_layers)
-            n2_layers = cleanup_network(network2)
-        end
-        @assert length(n1_layers) == length(n2_layers) "Networks have different number of layers after cleanup: $(length(n1_layers)) vs $(length(n2_layers))"
-        for (idx, (l1, l2)) in enumerate(zip(n1_layers, n2_layers))
-            @assert typeof(l1.node) == typeof(l2.node) "Mismatch in layer types: $(typeof(l1.node)) vs $(typeof(l2.node))"
-            @assert l1.input_ids == l2.input_ids "Mismatch in input ids for layers at index $(l1.layer_id) and $(l2.layer_id)"
-            if typeof(l1.node) == ONNXLinear{LayerIdT}
-                W1 = l1.node.dense.weight
-                b1 = l1.node.dense.bias
-                W2 = l2.node.dense.weight
-                b2 = l2.node.dense.bias
-                f1 = l1.node.dense.σ
-                f2 = l2.node.dense.σ
-                @assert f1 == identity "Unsupported activation function in network1: $f1"
-                @assert f2 == identity "Unsupported activation function in network2: $f2"
-                @assert size(W1) == size(W2) "Mismatch in weight matrix size: $(size(W1)) vs $(size(W2))"
-                @assert size(b1) == size(b2)
-                new_W = W1 .- W2
-                new_b = b1 .- b2
-                if all(iszero.(new_W)) && all(iszero.(new_b))
-                    @info "Detected zero difference in Dense layer, replacing with ZeroDense layer."
-                    diff_l = ZeroDense{LayerIdT}()
-                else
-                    diff_l = ONNXLinear(l1.node.inputs, l1.node.outputs, l1.node.name, new_W, new_b)
-                end
-                push!(diff_layers, DiffLayer(l1.layer_index, l1.input_ids, l1.output_ids, l1.node, diff_l, l2.node))
-            elseif typeof(l1.node) == ONNXAddConst{LayerIdT}
-                b1 = l1.node.c
-                b2 = l2.node.c
-                new_b = b1 .- b2
-                diff_l = ONNXAddConst(l1.node.inputs, l1.node.outputs, l1.node.name, new_b)
-                push!(diff_layers, DiffLayer(l1.layer_index, l1.input_ids, l1.output_ids, l1.node, diff_l, l2.node))
-            else
-                push!(diff_layers, DiffLayer(l1.layer_index, l1.input_ids, l1.output_ids, l1.node, l1.node, l2.node))
-            end
-        end
-        input_map = Dict{LayerIdT, Int64}()
-        for (input_id, idx) in network1.input_shapes
-            input_map[input_id] = io_map[input_id]
-        end
-        return new{LayerIdT}(input_map, diff_layers)
+end
+
+function GeminiNetwork(network1 :: OnnxNet{LayerIdT,NShapeIn, NShapeOut}, network2 :: OnnxNet{LayerIdT,NShapeIn, NShapeOut}) where {LayerIdT,NShapeIn,NShapeOut}
+    n1_layers, io_map = sort_network(network1)
+    n2_layers = sort_mirror_network(n1_layers, io_map, network2)
+    diff_layers = DiffLayer[]
+    if length(n1_layers) > length(n2_layers)
+        n1_layers = cleanup_network(network1)
+    elseif length(n2_layers) > length(n1_layers)
+        n2_layers = cleanup_network(network2)
     end
+    @assert length(n1_layers) == length(n2_layers) "Networks have different number of layers after cleanup: $(length(n1_layers)) vs $(length(n2_layers))"
+    for (idx, (l1, l2)) in enumerate(zip(n1_layers, n2_layers))
+        @assert ((typeof(l1.node) == typeof(l2.node)) 
+                || ((typeof(l1.node) <: ONNXPoly) && (typeof(l2.node) <: ONNXRelu))
+                || ((typeof(l1.node) <: ONNXPoly) && (typeof(l2.node) <: ONNXGelu))) "Mismatch in layer types: $(typeof(l1.node)) vs $(typeof(l2.node))"
+        @assert l1.input_ids == l2.input_ids "Mismatch in input ids for layers at index $(l1.layer_id) and $(l2.layer_id)"
+        if typeof(l1.node) <: ONNXLinear{LayerIdT}
+            W1 = l1.node.dense.weight
+            b1 = l1.node.dense.bias
+            W2 = l2.node.dense.weight
+            b2 = l2.node.dense.bias
+            f1 = l1.node.dense.σ
+            f2 = l2.node.dense.σ
+            @assert f1 == identity "Unsupported activation function in network1: $f1"
+            @assert f2 == identity "Unsupported activation function in network2: $f2"
+            @assert size(W1) == size(W2) "Mismatch in weight matrix size: $(size(W1)) vs $(size(W2))"
+            @assert size(b1) == size(b2)
+            new_W = W1 .- W2
+            new_b = b1 .- b2
+            if all(iszero.(new_W)) && all(iszero.(new_b))
+                @info "Detected zero difference in Dense layer, replacing with ZeroDense layer."
+                diff_l = ZeroDense{LayerIdT}()
+            else
+                diff_l = ONNXLinear(l1.node.inputs, l1.node.outputs, l1.node.name, new_W, new_b)
+            end
+            push!(diff_layers, DiffLayer(l1.layer_index, l1.input_ids, l1.output_ids, l1.node, diff_l, l2.node))
+        elseif typeof(l1.node) == ONNXAddConst{LayerIdT}
+            b1 = l1.node.c
+            b2 = l2.node.c
+            new_b = b1 .- b2
+            diff_l = ONNXAddConst(l1.node.inputs, l1.node.outputs, l1.node.name, new_b)
+            push!(diff_layers, DiffLayer(l1.layer_index, l1.input_ids, l1.output_ids, l1.node, diff_l, l2.node))
+        else
+            push!(diff_layers, DiffLayer(l1.layer_index, l1.input_ids, l1.output_ids, l1.node, l1.node, l2.node))
+        end
+    end
+    input_map = Dict{LayerIdT, Int64}()
+    for (input_id, idx) in network1.input_shapes
+        input_map[input_id] = io_map[input_id]
+    end
+    return GeminiNetwork{LayerIdT}(input_map, diff_layers)
 end
 
 function get_inputs(L :: DiffLayer{<:Node,<:Node,<:Node}) :: Vector{Int64}

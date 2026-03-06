@@ -22,6 +22,18 @@ OXP.onnx_node_to_flux_layer(node::ONNXMonomialPoly) = x -> begin
     vec(sum(node.coeffs .* x .^ collect(0:degree)', dims=2))
 end
 
+"""
+    ONNX node representing a layer of polynomial activation functions in Chebyshev basis.
+
+    params:
+    - `inputs`: input ids
+    - `outputs`: output ids
+    - `name`: name of the node
+    - `coeffs`: coefficients of the Chebyshev polynomials. One row per neuron, in order [p₀, p₁, ...]
+    - `l`: lower bound of the approximation domain for each neuron
+    - `u`: upper bound of the approximation domain for each neuron
+    - `ϵ`: approximation error for each neuron w.r.t. the original activation function (zero if there was no approximation)
+"""
 struct ONNXChebyshevPoly{S,N<:Number,VN<:AbstractVector{N}} <: ONNXPoly{S,N}
     inputs::AbstractVector{S}
     outputs::AbstractVector{S}
@@ -29,6 +41,7 @@ struct ONNXChebyshevPoly{S,N<:Number,VN<:AbstractVector{N}} <: ONNXPoly{S,N}
     coeffs::Array{N}
     l::VN 
     u::VN 
+    ϵ::VN
 end
 
 OXP.onnx_node_to_flux_layer(node::ONNXChebyshevPoly) = x -> begin

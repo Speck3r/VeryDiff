@@ -48,12 +48,10 @@ function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, ver
 
     res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
     ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
-    ϵs = getindex.(res, 2)  # don't really need them, just for debugging 
+    ϵs = getindex.(res, 2)  # store them in polynomial layer  # TODO: add error of piecewise polynomial approximation!
 
     max_idx = argmax(ϵs)
     verbosity > 0 && println("max error = ", ϵs[max_idx], " at idx ", max_idx, " with bounds ", lower[max_idx], " ", upper[max_idx])
-
-    #verbosity > 0 && println("max error = ", maximum(ϵs))
 
     if max_polys_per_layer == 1
         # repeat the single polynomial for all neurons
@@ -65,7 +63,7 @@ function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, ver
 
     # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.
     # Therefore, we reuse the same node names.
-    layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
+    layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper, ϵs) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
     return layer, ϵs
 end
 
@@ -92,7 +90,7 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
     else
         res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
         ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
-        ϵs = getindex.(res, 2)  # don't really need them, just for debugging 
+        ϵs = getindex.(res, 2)  # TODO: add error of piecewise polynomial approximation!
 
         max_idx = argmax(ϵs)
         verbosity > 0 && println("max error = ", ϵs[max_idx], " at idx ", max_idx, " with bounds ", lower[max_idx], " ", upper[max_idx])
@@ -108,7 +106,7 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
 
     # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.
     # Therefore, we reuse the same node names.
-    layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
+    layer = cheby ? ONNXChebyshevPoly(L.inputs, L.outputs, L.name, Matrix(ps), lower, upper, ϵs) : ONNXMonomialPoly(L.inputs, L.outputs, L.name, Matrix(ps))
     return layer, ϵs
 end
 

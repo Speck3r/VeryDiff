@@ -2,15 +2,17 @@ module Definitions
 
 using LinearAlgebra
 using Statistics
+using SpecialFunctions  # for erf()
 
 using VNNLib
-using VNNLib.OnnxParser: Node, ONNXLinear, ONNXRelu, ONNXAddConst
+using VNNLib.OnnxParser: Node, ONNXLinear, ONNXRelu, ONNXGelu, ONNXAddConst
 
 const OXP = VNNLib.OnnxParser
 
 using VeryDiff
 using VeryDiff: clenshaw_chebyshev
 
+include("ActivationFunctions.jl")
 include("ONNXNodes.jl")
 include("Network.jl")
 include("SortedVector.jl")
@@ -20,6 +22,7 @@ include("PropState.jl")
 include("Zonotope.jl")
 include("PolyBoundsCache.jl")
 
+export gelu, dgelu, d2gelu
 export Network,GeminiNetwork,Layer,ZeroDense,DiffLayer, get_input_indices, get_zonos_at_pos, executable_network
 export ONNXPoly, ONNXMonomialPoly, ONNXChebyshevPoly, extract_approximation_domain
 export Zonotope,DiffZonotope,BoundsCache,CachedZonotope,ZonotopeStorage

@@ -154,7 +154,7 @@ function init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS::PropStat
 end
 
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXPoly{S1}, ONNXRelu{S2}, ONNXRelu{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXPoly,<:ONNXPoly,<:ONNXRelu}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
     @assert length(inputs) == 1 "Poly-ReLU DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "Poly-ReLU DiffLayer should have exactly one output"
     input_zono_cache = inputs[1]
@@ -193,7 +193,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXPoly{S1}, ONNX
 end
 
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXLinear{S1}, ZeroDense{S2}, ONNXLinear{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXLinear,<:ZeroDense,<:ONNXLinear}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
     @assert length(inputs) == 1 "Dense DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "Dense DiffLayer should have exactly one output"
     input_zono_cache = inputs[1]
@@ -218,7 +218,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXLinear{S1}, Ze
     PS.zono_storage.zonotopes[output_positions[1]] = Z
 end
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXAddConst{S1},ONNXAddConst{S2},ONNXAddConst{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXAddConst,<:ONNXAddConst,<:ONNXAddConst}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
     @assert length(inputs) == 1 "Dense DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "Dense DiffLayer should have exactly one output"
     input_zono_cache = inputs[1]
@@ -237,7 +237,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXAddConst{S1},O
     PS.zono_storage.zonotopes[output_positions[1]] = Z
 end
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXLinear{S1},ONNXLinear{S2},ONNXLinear{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXLinear,<:ONNXLinear,<:ONNXLinear}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
     @assert length(inputs) == 1 "Dense DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "Dense DiffLayer should have exactly one output"
     input_zono_cache = inputs[1]

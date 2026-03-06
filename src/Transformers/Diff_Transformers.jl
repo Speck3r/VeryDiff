@@ -1,11 +1,11 @@
 function propagate_layer!(
     ZoutRefVec :: Vector{CachedZonotope},
     Ls :: DiffLayer{
-        ONNXLinear{S1},
-        ONNXLinear{S2},
-        ONNXLinear{S3}},
+        <:ONNXLinear,
+        <:ONNXLinear,
+        <:ONNXLinear},
     inputs :: Vector{DiffZonotope};
-    bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {S1, S2, S3}
+    bounds_cache :: Union{Nothing,BoundsCache}=nothing)
     @assert length(inputs) == 1 "Dense layer should have exactly one input zonotope"
     @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output zonotope"
     ZoutRef = ZoutRefVec[1]
@@ -96,11 +96,11 @@ end
 function propagate_layer!(
     ZoutRefVec :: Vector{CachedZonotope},
     Ls :: DiffLayer{
-        ONNXLinear{S1},
-        ZeroDense{S2},
-        ONNXLinear{S3}},
+        <:ONNXLinear,
+        <:ZeroDense,
+        <:ONNXLinear},
     inputs :: Vector{DiffZonotope};
-    bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {S1, S2, S3}
+    bounds_cache :: Union{Nothing,BoundsCache}=nothing)
     @assert length(inputs) == 1 "Dense layer should have exactly one input zonotope"
     @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output zonotope"
     ZoutRef = ZoutRefVec[1]

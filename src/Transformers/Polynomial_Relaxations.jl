@@ -68,3 +68,51 @@ function get_linear_relaxation(L::ONNXMonomialPoly, lower, upper)
     
     return λ, β, γ
 end
+
+
+function poly_initial_slope_guess(l₁, u₁, l₂, u₂, ∂l, ∂u)
+    # currently only called, when l₂, u₂ is unstable
+    # a is always 0
+    # b has different cases 
+    # l₁, u₁ negative: involves a₂
+    # l₁, u₁ positive: involves λ₂ and coeff for Δ??? 
+    # instable: 
+    #   TODO: make it return a₁, a₂, aΔ          
+    neg, pos, unstable = relu_stability_mask(l₁, u₁)
+    a = zero(l₁)
+    # TODO: what to do if ∂l == ∂u ?
+    ∂λ = ifelse.((∂l .== 0) .& (∂u .== 0), 0., clamp.(∂u ./ (∂u .- ∂l), 0., 1.))
+    b = ifelse.(unstable, ∂λ, 0.)
+    #b = ifelse.(neg, .-u₂ ./ (u₂ .- l₂), ifelse.(pos, .-l₂ ./ (u₂ .- l₂), 0))
+    return a, b
+end
+
+
+"""
+Find linear relaxation for p(x) - ReLU(y), when y ≥ 0.
+
+args:
+    L - the current polynomial layer
+    selector - indices or mask of the neurons where y ≥ 0 is true 
+    lower₁ - concrete lower bounds on x
+    upper₁ - concrete upper bounds on y 
+
+returns:
+    α, β, γ - s.t. α*x + β - γ ≤ p(x) - x ≤ α*x + β + γ
+"""
+function poly_pos_approx(L::ONNXChebyshevPoly, selector::AbstractVector, lower₁, upper₁)
+    # compute chebyshev representation of -x for the same approximation domain as the given polynomials.
+    # since -x is linear, we only need the first two coefficients and can thus always just use degree 1.
+    id_neg = (l, u) -> VeryDiff.chebyshev_coefficients(x -> -x, l, u, 1)
+    csx = hcat((id_neg.(L.l[selector], L.u[selector]))...)'  # make it a matrix
+
+    cs_diff = copy(L.coeffs[selector,:])
+    
+    if count(selector) > 0
+        # TODO: more elegant solution?
+        # we could return earlier and don't hand it to get_linear_relaxation_cheby if there is no neuron to approximate.
+        cs_diff[:, 1:2] .+= csx
+    end
+
+    get_linear_relaxation_cheby(cs_diff, L.l[selector], L.u[selector], lower₁[selector], upper₁[selector])
+end

@@ -133,44 +133,9 @@ function gelu_crit_overapprox_cheby(l, u, ps)
 end
 
 
-function get_linear_relaxation_cheby(cs::AbstractArray, l_fit::AbstractVector, u_fit::AbstractVector, l::AbstractVector, u::AbstractVector)
-
-
-
-    row_count = length(l)
-    nonlinmask = .~islinear.(eachrow(cs))
-    l̂ = copy(l_fit)
-    û = copy(u_fit)
-    # only need to linearly approximate the nonlinear parts
-    l̂[nonlinmask] .= l[nonlinmask]
-    û[nonlinmask] .= u[nonlinmask]
-    # for linear parts also the chebyshev coefficients are linear and thus only use the first two coefficients
-    λ = copy(cs[:,2])
-    β = copy(cs[:,1])
-    # the error for linear functions is 0
-    γ = zeros(row_count)
-
-    res = approx_polynomial_lin.(eachrow(cs[nonlinmask, :]), l̂[nonlinmask], û[nonlinmask], l_fit[nonlinmask], u_fit[nonlinmask], max_iter=REMEZ_ITERS[], cheby=true)
-    λ[nonlinmask] .= getindex.(res, 1)  # slope of the input
-    β[nonlinmask] .= getindex.(res, 2)  # bias
-    γ[nonlinmask] .= getindex.(res, 3)  # new error
-
-    # now need to transform from Chebyshev coefficients to α*x + β
-    # so evaluate at x₀ = 0 and x₁ = 1 to get these coeffs as
-    # α = (y₁ - y₀)/(x₁ - x₀)
-    # β = y₀  (since it was at 0)
-    y₀ = clenshaw_chebyshev.(eachrow([β λ]), 0., l̂, û)
-    y₁ = clenshaw_chebyshev.(eachrow([β λ]), 1., l̂, û)
-
-    α = (y₁ .- y₀)
-    β = y₀
-
-    return α, β, γ 
-end
-
-
 function approx_gelu_lin(l::N, u::N; verbosity=0, tol=N(1e-10), max_iter=10, cheby=true) where N<:Number
-    p_lin, ϵ = VeryDiff.remez(gelu, (p, l, u) -> gelu_crit_overapprox_cheby(l, u, p), VeryDiff.poly_norm, l, u, degree=1, 
+    degree = 1
+    p_lin, ϵ = remez(gelu, (p, l, u) -> gelu_crit_overapprox_cheby(l, u, p), VeryDiff.poly_norm, l, u, degree, 
                               verbosity=verbosity, max_iter=max_iter, tol=tol, cheby=cheby)
                                 
     a = convert_cheby_lin_to_monomial(p_lin, l, u)

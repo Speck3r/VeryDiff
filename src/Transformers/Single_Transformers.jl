@@ -141,9 +141,9 @@ function propagate_layer!(ZoutRef :: Zonotope, L :: Union{ONNXPoly{S}, ONNXGelu{
         end
         # @debug "Size of owned influence matrix after copy: $(size(influence_new[ZoutRef.owned_generators]))"
         influence_new[ZoutRef.owned_generators][:,column_pos:end] .= 0.0
-        bounds_range = upper[crossing] .- lower[crossing]
+        bounds_range = upper .- lower
         @inbounds for (idx, g) in enumerate(Zin.Gs)
-            influence_new[ZoutRef.owned_generators][:,column_pos:end] .+= Zin.influence[idx] * abs.((@view g[crossing,:]) ./ bounds_range)'
+            influence_new[ZoutRef.owned_generators][:,column_pos:end] .+= Zin.influence[idx] * abs.(g ./ bounds_range)'
         end
     else
         influence_new = Zin.influence
@@ -156,7 +156,7 @@ function propagate_layer!(ZoutRef :: Zonotope, L :: Union{ONNXPoly{S}, ONNXGelu{
     ZoutRef.Gs[ZoutRef.owned_generators][:,(end-new_gens+1):end] .= 0.0
     generator_offset = size(ZoutRef.Gs[ZoutRef.owned_generators],2) - new_gens
     A = ZoutRef.Gs[ZoutRef.owned_generators]
-    @inbounds for (i, row) in enumerate(findall(crossing))
+    @inbounds for (i, row) in enumerate(1:new_gens)
         A[row, (generator_offset + i)] = abs(γ[row])
     end
 end

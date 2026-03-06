@@ -34,14 +34,14 @@ end
     - `u`: upper bound of the approximation domain for each neuron
     - `ϵ`: approximation error for each neuron w.r.t. the original activation function (zero if there was no approximation)
 """
-struct ONNXChebyshevPoly{S,N<:Number,VN<:AbstractVector{N}} <: ONNXPoly{S,N}
+struct ONNXChebyshevPoly{S,N<:Number,VN<:AbstractVector{N},VN2<:AbstractVector{N}} <: ONNXPoly{S,N}
     inputs::AbstractVector{S}
     outputs::AbstractVector{S}
     name::S 
     coeffs::Array{N}
     l::VN 
     u::VN 
-    ϵ::VN
+    ϵ::VN2  # different type as we oftentimes have SubArray for l, u and just normal vector for ϵ
 end
 
 OXP.onnx_node_to_flux_layer(node::ONNXChebyshevPoly) = x -> begin

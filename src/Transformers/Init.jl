@@ -174,7 +174,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXPoly,<:ONNXP
     init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions, input_zono, input_zono_cache)
 end
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXPoly,<:ONNXPoly,<:ONNXGelu}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
+function init_layer!(PS :: PropState, diff_layer :: Union{DiffLayer{<:ONNXPoly,<:ONNXPoly,<:ONNXGelu},DiffLayer{<:ONNXGelu,<:ONNXGelu,<:ONNXGelu}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
     @assert length(inputs) == 1 "Poly-Gelu DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "Poly-Gelu DiffLayer should have exactly one output"
     input_zono_cache = inputs[1]

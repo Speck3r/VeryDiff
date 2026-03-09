@@ -299,3 +299,32 @@ function split_zono(distance_d, verification_task :: VerificationTask, verificat
         return Z1, Z2
     end
 end
+
+
+"""
+    `verification_pass(model₁, model₂, lb, ub)`
+
+    Executes a single zonotope forward pass to bound the difference between the outputs of model₁ and model₂.
+
+    args:
+    - `model₁`: First network (if polynomial verification, this should be the polynomial network)
+    - `model₂`: Second network (if polynomial verification, this should be the network with the original activation function)
+    - `lb`: Concrete lower bound in the input neurons
+    - `ub`: Concrete upper bound on the input neurons
+"""
+function verification_pass(model₁::OnnxNet, model₂::OnnxNet, lb::AbstractVector, ub::AbstractVector)
+    center = 0.5 .* (lb .+ ub)
+    radius = 0.5 .* (ub .- lb)
+    ∂model = GeminiNetwork(model₁, model₂)
+    task = VerificationTask(center, radius, findall(radius .!= 0), nothing, nothing, nothing, nothing, nothing, Inf, 1.0)
+    P = PropState(true)
+    prepare_prop_state!(P, task)
+    init_bounds_cache_approximation_domain!(∂model, P)
+
+    P = propagate!(∂model, P)
+    Zout = P.zono_storage.zonotopes[end].zonotope
+
+    bnds = zono_bounds(Zout.∂Z)
+    ϵ = maximum(abs.(bnds))
+    return ϵ
+end

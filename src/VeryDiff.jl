@@ -144,7 +144,7 @@ include("Cli.jl")
 export Network,GeminiNetwork,Layer,Dense,ReLU,WrappedReLU
 export Zonotope, DiffZonotope, PropState
 export zono_optimize, zono_bounds
-export verify_network
+export verify_network, verification_pass
 export get_epsilon_property, epsilon_split_heuristic, get_epsilon_property_naive
 export get_top1_property, top1_configure_split_heuristic
 

@@ -24,7 +24,7 @@ function init_default_zono(Z :: CachedZonotope)
     )
 end
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXRelu{S1}, ONNXRelu{S2}, ONNXRelu{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXRelu, <:ONNXRelu, <:ONNXRelu}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
     @assert length(inputs) == 1 "ReLU DiffLayer should have exactly one input"
     @assert length(output_positions) == 1 "ReLU DiffLayer should have exactly one output"
     input_zono_cache = inputs[1]

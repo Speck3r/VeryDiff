@@ -591,6 +591,9 @@ function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), u
         if (l̂ == û) && all(ps .== 0)
             # how can that happen?
             # TODO: better solution than just an if?
+            # poly(l) == 0 in this case, that's why it works!
+            return zero(N), poly(l), zero(N)
+        elseif l == u 
             return zero(N), poly(l), zero(N)
         end
 

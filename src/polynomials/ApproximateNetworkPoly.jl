@@ -88,6 +88,11 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
         # we don't know the error yet (could use an overapproximation/just a sampled approximation of the error?)
         verbosity > 0 && println("GeLU chebyshev approximation")
     else
+        # TODO: better idea than this hack???
+        # equal approximation bounds lead to issues with normalization later on, so widen a little bit
+        eq_mask = lower .== upper 
+        lower[eq_mask] .-= 1e-6
+        upper[eq_mask] .+= 1e-6
         res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
         ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
         ϵs = getindex.(res, 2)  # TODO: add error of piecewise polynomial approximation!

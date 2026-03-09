@@ -143,9 +143,13 @@ Iteratively approximate each layer in the network by a polynomial of a given deg
 
 The input ranges for the approximation are verified bounds computed by zonotope propagation.
 
+Note: This is not an efficient implementation - it should only be used for testing. 
+Can be made more efficient, once there is a convenient method for zonotope propagation through a single NN.
+
 args:
     net - Network to approximate 
-    input_set - input set for which to get bounds 
+    input_lb - concrete lower bounds on the input neurons
+    input_ub - concrete upper bounds on the input neurons 
     degree - degree of polynomial approximation for ReLU layers
 
 kwargs:
@@ -154,29 +158,57 @@ kwargs:
     max_iter - maximum number of iterations for Remez algorithm
     max_polys_per_layer - maximum number of different polynomials to use per layer
 """
-# function approximate_polynomial_iterative(net::LayeredModel{S}, input_set, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
-#     @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
-#     prop_state = PropState(true)
-#     layers_poly = Vector{OXP.Node{S}}()
-#     ẑ = input_set
-#     for i in 1:length(net.layers)
-#         bounds_layer = zono_bounds(ẑ)
+function approximate_polynomial_iterative(model::OnnxNet, input_lb::AbstractVector, input_ub::AbstractVector, degree::Integer; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf)
+    @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
 
-#         verbosity > 0 && println("--- layer $i ---")
-#         verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
-#         verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
-#         !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
-#         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
+    # TODO: terrible hack, but without GeminiNetwork we'd have to do all of the initialisation ourselves
+    ∂model = GeminiNetwork(model, deepcopy(model));
+    input_center = 0.5 .* (input_lb .+ input_ub)
+    input_radius = 0.5 .* (input_ub .- input_lb)
+    task = VerificationTask(input_center, input_radius, findall(input_radius .!= 0), nothing, nothing, nothing, nothing, nothing, Inf, 1.0)
+    P = PropState(true)
+    prepare_prop_state!(P, task)
 
-#         layer = net.layers[i]
-#         layer_poly, ϵs = approximate_polynomial(layer, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
-#         push!(layers_poly, layer_poly)
+    Zin = P.zono_storage.zonotopes[1].zonotope
+    P = propagate!(∂model, P)
+    Zout = P.zono_storage.zonotopes[end].zonotope
 
-#         ẑ = layer_poly(ẑ, prop_state)
-#     end
+    bnds = zono_bounds(Zout.∂Z)
+    
+    layers = Vector{DiffLayer}()
+    bounds_layer = [input_lb input_ub]
+    for i in 1:length(∂model.diff_layers)
+        layer = ∂model.diff_layers[i]
+        l1 = get_layer1(layer)
 
-#     return LayeredModel(layers_poly)
-# end
+        verbosity > 0 && println("--- layer $i ($(l1.name)) ---")
+        verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
+        verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
+        !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
+        !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
+
+        layer_poly, ϵs = approximate_polynomial(l1, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
+        diff_layer_poly = DiffLayer(layer.layer_idx, layer.inputs, layer.outputs, layer_poly, layer_poly, layer.layer2)
+        push!(layers, diff_layer_poly)
+
+        ∂model_cur = GeminiNetwork(∂model.inputs, layers)
+        P = PropState(true)
+        prepare_prop_state!(P, task)
+        init_bounds_cache_approximation_domain!(∂model_cur, P)
+        P = propagate!(∂model_cur, P)
+        
+        Zout = P.zono_storage.zonotopes[end].zonotope
+        bounds_layer = zono_bounds(Zout.Z₁)
+    end
+
+    model_poly = deepcopy(model)
+    for l in layers
+        l1 = get_layer1(l)
+        model_poly.nodes[l1.name] = l1
+    end
+
+    return model_poly
+end
 
 
 function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::AbstractVector, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S

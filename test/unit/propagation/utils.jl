@@ -3,12 +3,20 @@ using LinearAlgebra
 using Random
 
 """
-    create_random_dense_network(input_dim::Int, layer_dims::Vector{Int})
+    create_random_dense_network(input_dim::Int, layer_dims::Vector{Int}; activation=nothing, add_const=false)
 
 Create a randomized neural network with only Dense layers using the provided layer dimensions.
 Returns both a Network and an OnnxNet representation.
+
+args:
+- input_dim: input dimension
+- layer_dims: layer dimensions
+
+kwargs:
+- activation: :relu if the NN should have ReLU activation, :gelu is also possible, nothing for just linear layers
+- add_const: true iff network should have AddConst layers
 """
-function create_random_dense_network(input_dim::Int, layer_dims::Vector{Int}; relu=false, add_const=false)
+function create_random_dense_network(input_dim::Int, layer_dims::Vector{Int}; activation=nothing, add_const=false)
     layers = Vector{Node{String}}()
     layer_metadata = Vector{Tuple{String, Int}}()  # Track (layer_name, mutation_type) for synchronization
     cur_dim = input_dim
@@ -45,13 +53,21 @@ function create_random_dense_network(input_dim::Int, layer_dims::Vector{Int}; re
             prev_output_id = addconst_output_id
         end
         
-        if relu
+        if !isnothing(activation)
             layer_count += 1
             relu_input_id = prev_output_id
             relu_output_id = "output_$layer_count"
-            push!(layers, ONNXRelu([relu_input_id], [relu_output_id], "relu_$layer_count"))
+            if activation == :relu
+                push!(layers, ONNXRelu([relu_input_id], [relu_output_id], "relu_$layer_count"))
+            elseif activation == :gelu
+                push!(layers, ONNXGelu([relu_input_id], [relu_output_id], "gelu_$layer_count", "none"))
+            else 
+                throw(ArgumentError("Unknown activation function $activation !!!"))
+            end
+
             prev_output_id = relu_output_id
         end
+
         cur_dim = new_dim
     end
     
@@ -207,8 +223,8 @@ end
 Create two networks sharing the same architecture. When `identical` is true, the weights/biases are identical.
 Returns tuples of (Network, OnnxNet) pairs.
 """
-function make_dense_pair(input_dim::Int, layer_dims::Vector{Int}; identical::Bool=false, relu=false, add_const=false)
-    N1_onnx = create_random_dense_network(input_dim, layer_dims; relu=relu, add_const=add_const)
+function make_dense_pair(input_dim::Int, layer_dims::Vector{Int}; identical::Bool=false, activation=nothing, add_const=false)
+    N1_onnx = create_random_dense_network(input_dim, layer_dims; activation=activation, add_const=add_const)
     if identical
         N2_onnx = deepcopy(N1_onnx)
     else

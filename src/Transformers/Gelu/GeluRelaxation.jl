@@ -134,6 +134,11 @@ end
 
 
 function approx_gelu_lin(l::N, u::N; verbosity=0, tol=N(1e-10), max_iter=10, cheby=true) where N<:Number
+    if l == u 
+        # if l == u, we cannot use Chebyshev approximation as we usually normalize to [-1, 1] which requires division by u-l
+        return zero(N), gelu(l), zero(N)
+    end
+
     degree = 1
     p_lin, ϵ = remez(gelu, (p, l, u) -> gelu_crit_overapprox_cheby(l, u, p), VeryDiff.poly_norm, l, u, degree, 
                               verbosity=verbosity, max_iter=max_iter, tol=tol, cheby=cheby)

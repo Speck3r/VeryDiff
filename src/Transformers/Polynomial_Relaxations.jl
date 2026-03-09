@@ -18,6 +18,8 @@ returns:
 function get_linear_relaxation_cheby(cs::AbstractArray, l_fit::AbstractVector, u_fit::AbstractVector, l::AbstractVector, u::AbstractVector)
     row_count = length(l)
     nonlinmask = .~islinear.(eachrow(cs))
+    constant_mask = l .== u 
+
     l̂ = copy(l_fit)
     û = copy(u_fit)
     # only need to linearly approximate the nonlinear parts
@@ -34,17 +36,24 @@ function get_linear_relaxation_cheby(cs::AbstractArray, l_fit::AbstractVector, u
     β[nonlinmask] .= getindex.(res, 2)  # bias
     γ[nonlinmask] .= getindex.(res, 3)  # new error
 
+    a = zeros(row_count)
+    b = zeros(row_count)
     # now need to transform from Chebyshev coefficients to α*x + β
     # so evaluate at x₀ = 0 and x₁ = 1 to get these coeffs as
     # α = (y₁ - y₀)/(x₁ - x₀)
     # β = y₀  (since it was at 0)
-    y₀ = clenshaw_chebyshev.(eachrow([β λ]), 0., l̂, û)
-    y₁ = clenshaw_chebyshev.(eachrow([β λ]), 1., l̂, û)
+    y₀ = clenshaw_chebyshev.(eachrow([β λ])[.~constant_mask], 0., l̂[.~constant_mask], û[.~constant_mask])
+    y₁ = clenshaw_chebyshev.(eachrow([β λ])[.~constant_mask], 1., l̂[.~constant_mask], û[.~constant_mask])
 
-    α = (y₁ .- y₀)
-    β = y₀
+    a[.~constant_mask] .= (y₁ .- y₀)
+    b[.~constant_mask] .= y₀
 
-    return α, β, γ 
+    # fitting a linear function for degenerate interval [l,u] with l == u fails, so we just evaluate at the single point
+    # this incurs no error
+    a[constant_mask] .= zero(eltype(cs))
+    b[constant_mask] .= clenshaw_chebyshev.(eachrow(cs)[constant_mask], l[constant_mask], l_fit[constant_mask], u_fit[constant_mask])
+
+    return a, b, γ 
 end
 
 

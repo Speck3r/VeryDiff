@@ -616,7 +616,7 @@ function propagate_layer!(
         <:ONNXGelu{S2},
         <:ONNXGelu{S3}},
     inputs :: Vector{DiffZonotope};
-    bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {N,S1, S2, S3}
+    bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {S1, S2, S3}
     # TODO: de-duplicate code !!! 
     #       This is the same as the Poly-Gelu layer, but without adding the Poly-approximation error on top!
     @assert length(inputs) == 1 "Activation layer should have exactly one input zonotope"

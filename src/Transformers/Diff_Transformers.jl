@@ -371,9 +371,9 @@ function extract_bounds(Zin::DiffZonotope, bounds_cache :: Union{Nothing,BoundsC
     ∂lower = bounds_cache.∂lower
     ∂upper = bounds_cache.∂upper
 
-    @assert all(lower₁ .<= upper₁) "Invalid bounds for Z₁: lower bound is greater than upper bound"
-    @assert all(lower₂ .<= upper₂) "Invalid bounds for Z₂: lower bound is greater than upper bound"
-    @assert all(∂lower .<= ∂upper) "Invalid bounds for ∂Z: lower bound is greater than upper bound"
+    @assert all(lower₁ .<= upper₁) "Invalid bounds for Z₁: lower bound is greater than upper bound - lb₁ = $(lower₁), ub₁ = $(upper₁)"
+    @assert all(lower₂ .<= upper₂) "Invalid bounds for Z₂: lower bound is greater than upper bound - lb₂ = $(lower₂), ub₂ = $(upper₂)"
+    @assert all(∂lower .<= ∂upper) "Invalid bounds for ∂Z: lower bound is greater than upper bound - ∂lb = $(∂lower), ∂ub = $(∂upper)"
 
     #@info "Bounds Cache: Z₁=[$(lower₁), $(upper₁)], Z₂=[$(lower₂), $(upper₂)], ∂Z=[$(∂lower), $(∂upper)]"
     return lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper

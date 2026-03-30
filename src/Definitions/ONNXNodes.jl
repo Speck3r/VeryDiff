@@ -45,7 +45,10 @@ struct ONNXChebyshevPoly{S,N<:Number,VN<:AbstractVector{N},VN2<:AbstractVector{N
 end
 
 OXP.onnx_node_to_flux_layer(node::ONNXChebyshevPoly) = x -> begin
-    clenshaw_chebyshev.(eachrow(node.coeffs), x, node.l, node.u)
+    input_size = size(x)
+    x̂ = vec(x)
+    ŷ = clenshaw_chebyshev.(eachrow(node.coeffs), x̂, node.l, node.u)
+    reshape(ŷ, input_size)
 end
 
 struct ONNXDiffNode{S,N1<:OXP.Node{S},N2<:OXP.Node{S}} <: OXP.Node{S}

@@ -20,3 +20,4 @@ scipy = ""
 [pip.deps]
 onnx-graphsurgeon = ""
 onnx2pytorch = "@ git+https://github.com/phK3/onnx2pytorch.git@gelu-support"
+# onnx2pytorch = "@ git+https://github.com/phK3/onnx2pytorch.git@master"

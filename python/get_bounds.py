@@ -115,11 +115,16 @@ def compute_pre_activation_bounds(onnx_path, bounds_path, output_name, outfile, 
             # so just assume that everything has the correct shape!
             # arr = arr.reshape(v)
 
+            # print(f"Input {k} has shape {v} and bounds shape {arr.shape}")
+
             if arr.shape[0] == 2:
+                bounds_shape = (2,) + arr.shape[1:]
+                arr = arr.reshape(bounds_shape)
                 # we only have upper and lower bounds for the input
                 data_lb = torch.tensor(arr[0]).unsqueeze(0)
                 data_ub = torch.tensor(arr[1]).unsqueeze(0)
             else:
+                arr = arr.reshape(v)
                 data_lb = -torch.tensor(arr)
                 data_ub =  torch.tensor(arr)
 

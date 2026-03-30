@@ -71,8 +71,17 @@ end
 function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     @assert cheby "Currently, we only allow approximation in Chebyshev coefficients for GeLU layers!"
     
-    lower = @view bounds[:,1]
-    upper = @view bounds[:,2]
+    println("size(bounds) = ", size(bounds))
+    # true input size of the layer, without the last dimension containing lower and upper bounds
+    # not sure if we need this anywhere ...
+    in_size = tuple(size(bounds)[1:end-1]..., 1)
+
+    # lower = @view bounds[:,1]
+    # upper = @view bounds[:,2]
+    # for convolutional layers, we don't have vector bounds, but tensors of shape (..., 2) where the last dim contains the lower and upper bounds.
+    # we need to reshape to vectors for fitting the polynomials.
+    lower = vec(selectdim(bounds, ndims(bounds), 1))
+    upper = vec(selectdim(bounds, ndims(bounds), 2))
 
     if max_polys_per_layer == 1
         lower = [minimum(lower)]
@@ -329,11 +338,21 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
             push!(error_magnitudes, ϵs)
             push!(layer_bounds, bounds)
 
-            verbosity > 0 && println("--- layer $i ---")
-            verbosity > 0 && println("lower = ", bounds[:,1][1:min(size(bounds, 1), 5)])
-            verbosity > 0 && println("upper = ", bounds[:,2][1:min(size(bounds, 1), 5)])
-            !all(isfinite.(bounds)) && println("lb non-finite: ", (1:size(bounds,1))[.~isfinite.(bounds[:,1])])
-            !all(isfinite.(bounds)) && println("ub non-finite: ", (1:size(bounds,1))[.~isfinite.(bounds[:,2])])
+            if (verbosity > 0) || !all(isfinite.(bounds))
+                lower_print = vec(selectdim(bounds, ndims(bounds), 1))
+                upper_print = vec(selectdim(bounds, ndims(bounds), 2))
+
+                if verbosity > 0
+                    println("--- layer $i ---")
+                    println("lower = ", lower_print[1:min(length(lower_print), 5)])
+                    println("upper = ", upper_print[1:min(length(upper_print), 5)])
+                end 
+
+                if !all(isfinite.(bounds))
+                    println("lb non-finite: ", (1:length(lower_print))[.~isfinite.(lower_print)])
+                    println("ub non-finite: ", (1:length(upper_print))[.~isfinite.(upper_print)])
+                end
+            end
         else
             layer_poly = l.node
         end

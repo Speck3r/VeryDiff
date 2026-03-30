@@ -38,8 +38,8 @@ function approximate_polynomial(L::OXP.ONNXLinear, bounds, degree; cheby=true, v
 end
 
 function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
-    lower = @view bounds[:,1]
-    upper = @view bounds[:,2]
+    lower = vec(selectdim(bounds, ndims(bounds), 1))
+    upper = vec(selectdim(bounds, ndims(bounds), 2))
 
     if max_polys_per_layer == 1
         lower = [minimum(lower)]
@@ -56,9 +56,9 @@ function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, ver
     if max_polys_per_layer == 1
         # repeat the single polynomial for all neurons
         # (needed in current implementation of ChebyshevPoly for correct evaluation)
-        ps = repeat(ps[1:1, :], size(bounds, 1), 1)
-        lower = repeat(lower[1:1], size(bounds, 1))
-        upper = repeat(upper[1:1], size(bounds, 1))
+        ps = repeat(ps[1:1, :], length(lower), 1)
+        lower = repeat(lower[1:1], length(lower))
+        upper = repeat(upper[1:1], length(upper))
     end
 
     # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.
@@ -113,9 +113,9 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
     if max_polys_per_layer == 1
         # repeat the single polynomial for all neurons
         # (needed in current implementation of ChebyshevPoly for correct evaluation)
-        ps = repeat(ps[1:1, :], size(bounds, 1), 1)
-        lower = repeat(lower[1:1], size(bounds, 1))
-        upper = repeat(upper[1:1], size(bounds, 1))
+        ps = repeat(ps[1:1, :], length(lower), 1)
+        lower = repeat(lower[1:1], length(lower))
+        upper = repeat(upper[1:1], length(upper))
     end
 
     # We want the networks to be isomorphic and want to be able to recognize that purely from the node names.

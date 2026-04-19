@@ -278,14 +278,20 @@ args:
 
 kwargs:
     verbosity - verbosity level (0: silent, 1: print first 5 lower and upper bounds)
+    input_bounds - dictionary input_name => (lower_bound, upper_bound) to use for pre-activation bound computation 
+                   (if not provided, defaults to [0,1] bounds for all inputs). Bounds need to be in correct shape!
     cheby - whether to use Chebyshev basis (true) or Monomial basis (false) for polynomial approximation
     max_iter - maximum number of iterations for Remez algorithm
     max_polys_per_layer - maximum number of different polynomials to use per layer
     tight_gelu - use tight initialization of gelu relaxation
 """
-function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf, tight_gelu=true)
+function approximate_polynomial_abcrown(onnx_path, degree; input_bounds=nothing, cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf, tight_gelu=true)
     ERROR_NODES_SCRIPT = pyimport("insert_error_nodes")
     BOUNDS_SCRIPT      = pyimport("get_bounds")
+
+    if isnothing(input_bounds)
+        input_bounds = Dict()
+    end
 
     # load model in julia
     model = load_onnx_model(onnx_path)
@@ -307,9 +313,13 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
             # prepare input bounds
             h5open(input_bounds_file, "w") do file 
                 for (k, v) in model.input_shapes
-                    # TODO: make this more general than just [0,1] input bounds
+                    if k in keys(input_bounds)
+                        lb, ub = input_bounds[k]
+                        @assert size(lb) == size(ub) == v "input bounds for $k have incorrect shape, expected $v but got $(size(lb)) and $(size(ub))"
+                    else
                     lb = zeros(v)
                     ub = ones(v)
+                    end
                     # hdf5 already converts from WHCN to NCHW
                     file[k] = cat(lb, ub, dims=ndims(lb))
                 end
@@ -325,13 +335,11 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
             output_name = output_names[1]
             output_bounds = "out_bounds.h5"
             BOUNDS_SCRIPT.compute_pre_activation_bounds(error_net_path, input_bounds_file, output_name; outfile=output_bounds, method="alpha-crown", tight_gelu=tight_gelu)
-            # run(`$ABCROWN_PYTHONPATH $(BOUNDS_SCRIPT) $(error_net_path) $(input_bounds_file) $(output_name) --output_file $(output_bounds)`)
 
             bounds = h5open(output_bounds, "r") do file 
                 read(file[output_name])
             end
 
-            # ϵs = compute_approximation_errors(bounds, ϵ=0.05)
             layer_poly, ϵs = VeryDiff.approximate_polynomial(l.node, bounds, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer)
 
             push!(activations_considered, l)
@@ -358,9 +366,6 @@ function approximate_polynomial_abcrown(onnx_path, degree; cheby=true, verbosity
         end
         push!(layers_poly, layer_poly)
     end
-
-    # need to do [l for l in layers_poly] to convert from OXP.Node without information about identifier type to OXP.Node{S}
-    # return LayeredModel([l for l in layers_poly])
 
     # need to return a full OnnxNet here for later steps, but replace the original nodes with the polynomial approximations.
     # structure of the model did not change, so we can just update model.nodes

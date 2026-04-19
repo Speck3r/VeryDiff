@@ -379,7 +379,7 @@ function poly_initial_slope_guess(l₁, u₁, l₂, u₂, ∂l, ∂u)
     # l₁, u₁ positive: involves λ₂ and coeff for Δ??? 
     # instable: 
     #   TODO: make it return a₁, a₂, aΔ          
-    neg, pos, unstable = stability_mask(l₁, u₁)
+    neg, pos, unstable = relu_stability_mask(l₁, u₁)
     a = zero(l₁)
     # TODO: what to do if ∂l == ∂u ?
     ∂λ = ifelse.((∂l .== 0) .& (∂u .== 0), 0., clamp.(∂u ./ (∂u .- ∂l), 0., 1.))
@@ -515,7 +515,7 @@ function propagate_diff_layer(Ls :: Tuple{<:ONNXPoly{S,N},ONNXDiffNode{S,<:ONNXP
             #zero_diff = ∂upper .== 0.0 .&& ∂lower .== 0.0
 
             # Compute Phase Behaviour
-            neg, pos, unstable = stability_mask(lower₂, upper₂)
+            neg, pos, unstable = relu_stability_mask(lower₂, upper₂)
         
             if USE_REWRITE_DIFF[]
                 crossing_new_generator = pos .| unstable

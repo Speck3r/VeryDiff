@@ -102,9 +102,19 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
         eq_mask = lower .== upper 
         lower[eq_mask] .-= 1e-6
         upper[eq_mask] .+= 1e-6
+
+        if APPROX_POLY_THREADS[] > 1
+            res = ThreadsX.map((l, u) -> VeryDiff.approx_gelu_poly(l, u, degree, max_iter=max_iter, cheby=cheby), lower, upper)
+        else
         res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
+        end
+
         ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
         ϵs = getindex.(res, 2)  # TODO: add error of piecewise polynomial approximation!
+
+        # looks cleaner than the above, but consumes WAY to much memory!
+        #ps_vecvec, ϵs = zip(res...)
+        #ps = stack(ps_vecvec)'
 
         max_idx = argmax(ϵs)
         verbosity > 0 && println("max error = ", ϵs[max_idx], " at idx ", max_idx, " with bounds ", lower[max_idx], " ", upper[max_idx])

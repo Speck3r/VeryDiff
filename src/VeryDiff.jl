@@ -51,6 +51,9 @@ const ABCROWN_PATH = Ref{String}("")
 const AUTOLIRPA_PATH = Ref{String}("")
 const PYTHON_SCRIPTS_DIR = joinpath(@__DIR__, "..", "python")
 
+"""number of threads to use for parallel polynomial approximation of layers"""
+const APPROX_POLY_THREADS = Ref{Int}(1)
+
 # We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()
     BLAS.set_num_threads(1)

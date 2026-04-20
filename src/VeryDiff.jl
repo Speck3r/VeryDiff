@@ -15,6 +15,7 @@ using JLD2
 using Artifacts
 using PythonCall
 using HDF5
+using ThreadsX
 
 using GLPK
 using Gurobi

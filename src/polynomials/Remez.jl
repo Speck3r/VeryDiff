@@ -657,7 +657,23 @@ end
 
 function approx_gelu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10), max_iter=10, plotting=false, cheby=true) where N<:Number
     @assert cheby "GeLU Remez approximation is only defined for Chebyshev basis."
-    f_gpp = make_eval_gelu_piecewise_poly(GELU_PP)
-    errfun = (p, l, u) -> piecewise_poly_error(GELU_PP, p, l, u)
-    p, ϵ = remez(f_gpp, errfun, poly_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=cheby)
+    if u <= GELU_PP.a
+        # just use the linear approximation gelu(x) ≈ 0 for x <= a
+        p = zeros(N, degree+1)
+        ϵ = zero(N)
+    elseif l >= GELU_PP.b
+        # just use the linear approximation gelu(x) ≈ x for x >= b
+        # TODO: is there a better way to get the Chebyshev coeffs for f(x) = x?
+        f_lin = x -> x
+        cs = VeryDiff.chebyshev_coefficients(f_lin, l, u, 1)
+        p = zeros(N, degree + 1)
+        p[1:2] .= cs 
+        ϵ = zeros(N)
+    else
+        f_gpp = make_eval_gelu_piecewise_poly(GELU_PP)
+        errfun = (p, l, u) -> piecewise_poly_error(GELU_PP, p, l, u)
+        p, ϵ = remez(f_gpp, errfun, poly_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=cheby)
+    end
+
+    return p, ϵ
 end

@@ -37,6 +37,16 @@ function approximate_polynomial(L::OXP.ONNXLinear, bounds, degree; cheby=true, v
     return L, 0.
 end
 
+function approximate_polynomial(L::OXP.ONNXConv, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+    # nothing to do here
+    return L, 0.
+end
+
+function approximate_polynomial(L::OXP.ONNXBatchNorm, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
+    # batchnorm is already linear
+    return L, 0.
+end
+
 function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, verbosity=0, max_iter=20, max_polys_per_layer=Inf)
     lower = vec(selectdim(bounds, ndims(bounds), 1))
     upper = vec(selectdim(bounds, ndims(bounds), 2))
@@ -106,7 +116,7 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
         if APPROX_POLY_THREADS[] > 1
             res = ThreadsX.map((l, u) -> VeryDiff.approx_gelu_poly(l, u, degree, max_iter=max_iter, cheby=cheby), lower, upper)
         else
-        res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
+            res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby)
         end
 
         ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
@@ -230,7 +240,7 @@ function approximate_polynomial_iterative(model::OnnxNet, input_lb::AbstractVect
 end
 
 
-function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::AbstractVector, degree; verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
+function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::AbstractVector, degree; widen_factor=2., verbosity=0, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
     @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
     layers_poly = Vector{OXP.Node{S}}()
 
@@ -244,14 +254,24 @@ function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::Abstra
 
         @assert length(inputs) == 1 "Currently only single input layers are supported for sampling-based approximation"
         ys_layer = inputs[1]
-        Y_layer = vcat(ys_layer...)
+        # stack along the last dimension --> (size(ys_layer)..., n_samples)
+        Y_layer = stack(ys_layer)
 
-        # TODO: need to change this for e.g. conv layer!!!
-        lb_layer = vec(minimum(Y_layer, dims=1))
-        ub_layer = vec(maximum(Y_layer, dims=1))
-        bounds_layer = hcat(lb_layer, ub_layer)
+        @show size(ys_layer)
+        @show size(Y_layer)
 
-        verbosity > 0 && println("--- layer $i ---")
+        lb_layer = vec(minimum(Y_layer, dims=ndims(Y_layer)))
+        ub_layer = vec(maximum(Y_layer, dims=ndims(Y_layer)))
+
+        center = 0.5 .* (lb_layer .+ ub_layer)
+        radius = 0.5 .* (ub_layer .- lb_layer)
+        widen_radius = widen_factor .* radius
+        lb_layer_widened = center .- widen_radius
+        ub_layer_widened = center .+ widen_radius
+
+        bounds_layer = hcat(lb_layer_widened, ub_layer_widened)
+
+        verbosity > 0 && println("--- layer ", l.node.name, " ---")
         verbosity > 0 && println("lower = ", bounds_layer[:,1][1:min(size(bounds_layer, 1), 5)])
         verbosity > 0 && println("upper = ", bounds_layer[:,2][1:min(size(bounds_layer, 1), 5)])
         !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
@@ -327,8 +347,8 @@ function approximate_polynomial_abcrown(onnx_path, degree; input_bounds=nothing,
                         lb, ub = input_bounds[k]
                         @assert size(lb) == size(ub) == v "input bounds for $k have incorrect shape, expected $v but got $(size(lb)) and $(size(ub))"
                     else
-                    lb = zeros(v)
-                    ub = ones(v)
+                        lb = zeros(v)
+                        ub = ones(v)
                     end
                     # hdf5 already converts from WHCN to NCHW
                     file[k] = cat(lb, ub, dims=ndims(lb))

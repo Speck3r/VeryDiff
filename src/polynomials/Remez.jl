@@ -668,7 +668,7 @@ function approx_gelu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10)
         cs = VeryDiff.chebyshev_coefficients(f_lin, l, u, 1)
         p = zeros(N, degree + 1)
         p[1:2] .= cs 
-        ϵ = zeros(N)
+        ϵ = zero(N)
     else
         f_gpp = make_eval_gelu_piecewise_poly(GELU_PP)
         errfun = (p, l, u) -> piecewise_poly_error(GELU_PP, p, l, u)

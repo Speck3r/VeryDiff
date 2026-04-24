@@ -39,7 +39,7 @@ VNNLib = "286915b0-5841-4eea-9013-d818f395ad8c"
 VNNLib = {rev = "convert2dense", url = "https://github.com/phK3/VNNLib.jl"}
 
 [compat]
-HDF5_jll = "2.1.0"
+HDF5_jll = "=2.1.0"
 ThreadsX = "0.1.12"
 VNNLib = "0.3.0"
 

@@ -13,6 +13,7 @@ DoubleFloats = "497a8b3b-efae-58df-a0af-a86822472b78"
 GLPK = "60bf3e95-4087-53dc-ae20-288a0d20c6a6"
 Gurobi = "2e9cd046-0924-5485-92f1-d5272153d98b"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+HDF5_jll = "0234f1f7-429e-5d53-9886-15a909be8d59"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -38,6 +39,7 @@ VNNLib = "286915b0-5841-4eea-9013-d818f395ad8c"
 VNNLib = {rev = "convert2dense", url = "https://github.com/phK3/VNNLib.jl"}
 
 [compat]
+HDF5_jll = "2.1.0"
 ThreadsX = "0.1.12"
 VNNLib = "0.3.0"
 

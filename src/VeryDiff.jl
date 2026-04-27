@@ -108,7 +108,11 @@ include("polynomials/Util.jl")
 include("polynomials/chebyshev/Chebyshev.jl")
 include("polynomials/chebyshev/chebyshev_interface.jl")
 include("polynomials/PiecewisePolynomials.jl")
-const GELU_PP = load_piecewise_poly(joinpath(@__DIR__, "..", "resources", "gelu_piecewise_poly_sampled_degree_15.jld2"))
+
+# verified error of 1e-10
+const GELU_PP = load_piecewise_poly(joinpath(@__DIR__, "..", "resources", "gelu_6pieces_15degree_1e-10error.jld2"))
+# same parameters - *sampled* error of 2.48e-14 (not verified)
+# const GELU_PP = load_piecewise_poly(joinpath(@__DIR__, "..", "resources", "gelu_piecewise_poly_sampled_degree_15.jld2"))
 
 include("polynomials/Remez.jl")
 # include("polynomials/PolynomialDifferenceRelaxation.jl")

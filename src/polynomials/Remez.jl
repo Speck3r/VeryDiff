@@ -675,5 +675,7 @@ function approx_gelu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10)
         p, ϵ = remez(f_gpp, errfun, poly_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=cheby)
     end
 
+    ϵ += GELU_PP.ϵ
+
     return p, ϵ
 end

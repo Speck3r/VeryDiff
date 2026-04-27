@@ -6,16 +6,32 @@ struct GeLUPiecewisePoly{N,VN,VVN,FN}
     ls::VN  # lower bounds for polynomial segments
     us::VN  # upper bounds for polynomial segments
     polys::FN  # functions to evaluate the polynomials
+    ϵ::N  # maximum error between gelu and the polynomials
 end
 
 
-function load_piecewise_poly(path)
+"""
+    `load_piecewise_poly(path; no_error=false)`
+
+Loads a piecewise polynomial stored in a .jld2 file given by the path.
+
+If you don't care about the error between the piecewise polynomials and the function they approximate,
+you can pass no_error=true.
+"""
+function load_piecewise_poly(path; no_error=false)
     params = load(path)["params"]
     poly_coeffs = first.(params["polys"])
     ls = getindex.(params["polys"], 2)
     us = getindex.(params["polys"], 3)
+
+    if no_error
+        ϵ = 0.
+    else
+        ϵ  = maximum(params["errors"])
+    end
+
     polys = [make_eval_chebyshev(cs, l, u) for (cs, l, u) in zip(poly_coeffs, ls, us)]
-    GeLUPiecewisePoly(params["linear_up_to"], params["linear_from_on"], poly_coeffs, ls, us, polys)
+    GeLUPiecewisePoly(params["linear_up_to"], params["linear_from_on"], poly_coeffs, ls, us, polys, ϵ)
 end
 
 

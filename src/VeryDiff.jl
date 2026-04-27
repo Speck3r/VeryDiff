@@ -1,6 +1,8 @@
 module VeryDiff
 
 using Printf
+using Preferences
+using CondaPkg
 
 using DoubleFloats  # for better precision in polynomial approximation
 #using MaskedArrays
@@ -99,6 +101,8 @@ end
 #pinthreads(:cores)
 
 const FIRST_ROUND = Ref{Bool}(true)
+
+include("set_hdf5_lib.jl")
 
 include("Util/simd_bool.jl")
 include("Debugger/Debugger.jl")

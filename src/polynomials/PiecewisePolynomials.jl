@@ -90,16 +90,32 @@ function piecewise_poly_error(pp::GeLUPiecewisePoly{N,VN,VVN,FN}, p::AbstractVec
     # error for the polynomial pieces 
     # here GeLU(x) - p(x) ≈ q(x) - p(x)
     # so we can reuse the already defined polyonmial error 
-    for (l̂, û, q) in zip(pp.ls, pp.us, pp.coeffs)
+    for (l̂, û, q, f_q) in zip(pp.ls, pp.us, pp.coeffs, pp.polys)
         # only need to care about this polynomial piece if the approximation intervals intersect,
         # i.e. [l̂, û] ∩ [l, u] ≠ ∅
         l_intersect = max(l̂, l)
         u_intersect = min(û, u)
         if l_intersect <= u_intersect
-            # convert p to the approximation domain of the polynomial piece
-            ps = chebyshev_coefficients(poly_candidate, l̂, û, degree)
-            
-            xs, ys = poly_error_cheby(q, ps, l̂, û)
+            if (l̂ == l_intersect) && (u_intersect == û)
+                # if intersection spans whole approximation interval of the polynomial piece,
+                # we can just convert the poly to the domain of the polynomial piece.
+                # Everything will behave nicely since both polys are within their approximation domain.
+
+                # convert p to the approximation domain of the polynomial piece
+                ps = chebyshev_coefficients(poly_candidate, l̂, û, degree)
+                
+                xs, ys = poly_error_cheby(q, ps, l̂, û)
+            else 
+                # polynomials can behave nastily outside of their approximation domain.
+                # We need to convert both of them to the intersection domain, where both behave nicely.
+
+                # convert p and q to the intersection domain
+                ps = chebyshev_coefficients(poly_candidate, l_intersect, u_intersect, degree)
+                qs = chebyshev_coefficients(f_q, l_intersect, u_intersect, degree)
+
+                xs, ys = poly_error_cheby(qs, ps, l_intersect, u_intersect)
+            end
+
             xs = [x for x in xs if (l_intersect <= x && x <= u_intersect)]
             push!(xs_all, xs...)
         end

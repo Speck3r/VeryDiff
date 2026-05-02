@@ -71,7 +71,8 @@ returns:
 
 """
 function piecewise_poly_error(pp::GeLUPiecewisePoly{N,VN,VVN,FN}, p::AbstractVector{N}, l::N, u::N) where {N,VN,VVN,FN}
-    xs_all = Vector{N}()
+    # xs_all = Vector{N}()
+    xs_all = [l, u]
 
     # executable function for p
     poly_candidate = make_eval_chebyshev(p, l, u)

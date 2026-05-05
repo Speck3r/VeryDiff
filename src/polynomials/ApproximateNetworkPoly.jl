@@ -47,6 +47,10 @@ function approximate_polynomial(L::OXP.ONNXBatchNorm, bounds, degree; cheby=true
     return L, 0.
 end
 
+function VeryDiff.approximate_polynomial(L::OXP.ONNXReshape, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+    return L, 0
+end
+
 function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     println("size(bounds) = ", size(bounds))
     in_size = tuple(size(bounds)[1:end-1]..., 1)

@@ -71,8 +71,7 @@ returns:
 
 """
 function piecewise_poly_error(pp::GeLUPiecewisePoly{N,VN,VVN,FN}, p::AbstractVector{N}, l::N, u::N) where {N,VN,VVN,FN}
-    # xs_all = Vector{N}()
-    xs_all = [l, u]
+    xs_all = Vector{N}()
 
     # executable function for p
     poly_candidate = make_eval_chebyshev(p, l, u)
@@ -85,6 +84,7 @@ function piecewise_poly_error(pp::GeLUPiecewisePoly{N,VN,VVN,FN}, p::AbstractVec
         ∇p = chebyshev_derivative(.-p, l, u)
         xs_zero = chebyshev_roots(∇p, l, u)
         xs_zero = [x for x in xs_zero if (l <= x) && (x <= pp.a)]
+        push!(xs_all, l)
         push!(xs_all, xs_zero...)
     end
 
@@ -134,6 +134,7 @@ function piecewise_poly_error(pp::GeLUPiecewisePoly{N,VN,VVN,FN}, p::AbstractVec
         xs_one = chebyshev_roots(∇p, l, u)
         xs_one = [x for x in xs_one if (pp.b <= x) && (x <= u)]
         push!(xs_all, xs_one...)
+        push!(xs_all, u)
     end
 
     f_g = make_eval_gelu_piecewise_poly(pp)

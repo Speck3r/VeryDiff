@@ -625,7 +625,7 @@ function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max
 
         if plotting
             xs = range(l, u, 100)
-            plt = plot(xs, f.(xs), label="f(x)")
+            plt1 = plot(xs, f.(xs), label="f(x)")
             #scatter!(x_cur, f_cur, label="x_$i")
 
             if cheby 
@@ -637,6 +637,13 @@ function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max
             barys = barycentric_interpolation(xs, p_cur, x_cur, w)
             plot!(xs, barys, label="bary(x)")
             #scatter!(x_next, f.(x_next), label="x_$(i+1)")
+
+            xs_err, ys_err = f_error(p, l, u)
+            f_p = x -> clenshaw_chebyshev(p, x, l, u)
+            plt2 = plot(xs, f.(xs) .- f_p.(xs), label="f(x) - p(x)")
+            scatter!(x_next, f.(x_next) .- f_p.(x_next), label="x_next")
+
+            plt = plot(plt1, plt2, layout=(1, 2))
             display(plt)
         end
 

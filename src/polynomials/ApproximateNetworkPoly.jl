@@ -31,23 +31,23 @@ returns:
 # end
 
 
-function approximate_polynomial(L::OXP.ONNXLinear, bounds, degree; cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXLinear, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     # nothing to do here
     # no error for linear layer
     return L, 0.
 end
 
-function approximate_polynomial(L::OXP.ONNXConv, bounds, degree; cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXConv, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     # nothing to do here
     return L, 0.
 end
 
-function approximate_polynomial(L::OXP.ONNXBatchNorm, bounds, degree; cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXBatchNorm, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     # batchnorm is already linear
     return L, 0.
 end
 
-function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     println("size(bounds) = ", size(bounds))
     in_size = tuple(size(bounds)[1:end-1]..., 1)
     
@@ -59,7 +59,7 @@ function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, ver
         upper = [maximum(upper)]
     end
 
-    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby, tol=tol)
+    res = VeryDiff.approx_relu_poly.(lower, upper, degree, max_iter=max_iter, selection=selection, cheby=cheby, tol=tol)
     ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
     ϵs = getindex.(res, 2)  # store them in polynomial layer  # TODO: add error of piecewise polynomial approximation!
 
@@ -83,7 +83,7 @@ function approximate_polynomial(L::OXP.ONNXRelu, bounds, degree; cheby=true, ver
 end
 
 
-function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     @assert cheby "Currently, we only allow approximation in Chebyshev coefficients for GeLU layers!"
     
     println("size(bounds) = ", size(bounds))
@@ -119,9 +119,9 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
         upper[eq_mask] .+= 1e-6
 
         if APPROX_POLY_THREADS[] > 1
-            res = ThreadsX.map((l, u) -> VeryDiff.approx_gelu_poly(l, u, degree, max_iter=max_iter, cheby=cheby, tol=tol), lower, upper)
+            res = ThreadsX.map((l, u) -> VeryDiff.approx_gelu_poly(l, u, degree, max_iter=max_iter, selection=selection, cheby=cheby, tol=tol), lower, upper)
         else
-            res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, cheby=cheby, tol=tol)
+            res = approx_gelu_poly.(lower, upper, degree, max_iter=max_iter, selection=selection, cheby=cheby, tol=tol)
         end
 
         ps = hcat(getindex.(res, 1)...)'  # TODO: is there a better way to do vec of vec to matrix?
@@ -152,13 +152,13 @@ function approximate_polynomial(L::OXP.ONNXGelu, bounds, degree; cheby=true, ver
 end
 
 
-function approximate_polynomial(L::ONNXPoly, bounds, degree; cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::ONNXPoly, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     @warn "skipping already polynomial layer (but degree might differ!/Cheby vs. Monomial Form might not match!)"
     # no error for already polynomial layer
     return L, 0.
 end
 
-function approximate_polynomial(L::OXP.ONNXFlatten, bounds, degree; cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial(L::OXP.ONNXFlatten, bounds, degree; cheby=true, verbosity=0, selection=:contiguous, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     # no error for flattening layer
     return L, 0. 
 end
@@ -194,7 +194,7 @@ kwargs:
     max_iter - maximum number of iterations for Remez algorithm
     max_polys_per_layer - maximum number of different polynomials to use per layer
 """
-function approximate_polynomial_iterative(model::OnnxNet, input_lb::AbstractVector, input_ub::AbstractVector, degree::Integer; verbosity=0, cheby=true, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
+function approximate_polynomial_iterative(model::OnnxNet, input_lb::AbstractVector, input_ub::AbstractVector, degree::Integer; verbosity=0, selection=:contiguous, cheby=true, tol=1e-10, max_iter=20, max_polys_per_layer=Inf)
     @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
 
     # TODO: terrible hack, but without GeminiNetwork we'd have to do all of the initialisation ourselves
@@ -223,7 +223,7 @@ function approximate_polynomial_iterative(model::OnnxNet, input_lb::AbstractVect
         !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
 
-        layer_poly, ϵs = approximate_polynomial(l1, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer, tol=tol)
+        layer_poly, ϵs = approximate_polynomial(l1, bounds_layer, degree, cheby=cheby, verbosity=verbosity, selection=selection, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer, tol=tol)
         diff_layer_poly = DiffLayer(layer.layer_idx, layer.inputs, layer.outputs, layer_poly, layer_poly, layer.layer2)
         push!(layers, diff_layer_poly)
 
@@ -247,7 +247,7 @@ function approximate_polynomial_iterative(model::OnnxNet, input_lb::AbstractVect
 end
 
 
-function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::AbstractVector, degree; widen_factor=2., verbosity=0, tol=1e-10, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
+function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::AbstractVector, degree; widen_factor=2., selection=:contiguous, verbosity=0, tol=1e-10, cheby=true, max_iter=20, max_polys_per_layer=Inf) where S
     @assert (max_polys_per_layer == Inf) || (max_polys_per_layer == 1) "only max_polys_per_layer=1 (one polynomial for all neurons) or Inf (one polynomial for each neuron) supported currently"
     layers_poly = Vector{OXP.Node{S}}()
 
@@ -284,7 +284,7 @@ function approximate_polynomial_iterative_sampling(net::OnnxNet{S}, X_in::Abstra
         !all(isfinite.(bounds_layer)) && println("lb non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,1])])
         !all(isfinite.(bounds_layer)) && println("ub non-finite: ", (1:size(bounds_layer,1))[.~isfinite.(bounds_layer[:,2])])
 
-        layer_poly, ϵs = approximate_polynomial(l.node, bounds_layer, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer, tol=tol)
+        layer_poly, ϵs = approximate_polynomial(l.node, bounds_layer, degree, cheby=cheby, verbosity=verbosity, selection=selection, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer, tol=tol)
         push!(layers_poly, layer_poly)
 
         outputs = [OXP.onnx_node_to_flux_layer(layer_poly)(y) for y in ys_layer]
@@ -322,7 +322,7 @@ kwargs:
     max_polys_per_layer - maximum number of different polynomials to use per layer
     tight_gelu - use tight initialization of gelu relaxation
 """
-function approximate_polynomial_abcrown(onnx_path, degree; input_bounds=nothing, cheby=true, verbosity=0, tol=1e-10, max_iter=20, max_polys_per_layer=Inf, tight_gelu=true)
+function approximate_polynomial_abcrown(onnx_path, degree; input_bounds=nothing, cheby=true, verbosity=0, tol=1e-10, selection=:contiguous, max_iter=20, max_polys_per_layer=Inf, tight_gelu=true)
     ERROR_NODES_SCRIPT = pyimport("insert_error_nodes")
     BOUNDS_SCRIPT      = pyimport("get_bounds")
 
@@ -377,7 +377,7 @@ function approximate_polynomial_abcrown(onnx_path, degree; input_bounds=nothing,
                 read(file[output_name])
             end
 
-            layer_poly, ϵs = VeryDiff.approximate_polynomial(l.node, bounds, degree, cheby=cheby, verbosity=verbosity, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer, tol=tol)
+            layer_poly, ϵs = VeryDiff.approximate_polynomial(l.node, bounds, degree, cheby=cheby, verbosity=verbosity, selection=selection, max_iter=max_iter, max_polys_per_layer=max_polys_per_layer, tol=tol)
 
             push!(activations_considered, l)
             push!(error_magnitudes, ϵs)

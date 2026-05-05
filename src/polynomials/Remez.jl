@@ -277,7 +277,7 @@ returns:
     x_next - sorted vector of next candidate points 
     max_err - maximum absolute error between the true function and the candidate polynomial p
 """
-function update_points(xk::AbstractVector{N}, h::N, p::AbstractVector{N}, f_error, l::N, u::N; method=:full_exchange) where N<:Number
+function update_points(xk::AbstractVector{N}, h::N, p::AbstractVector{N}, f_error, l::N, u::N; method=:full_exchange, selection=:dpmax) where N<:Number
     n = length(xk)
     x_error, y_error = f_error(p, l, u)
     abs_err = abs.(y_error)
@@ -323,18 +323,205 @@ function update_points(xk::AbstractVector{N}, h::N, p::AbstractVector{N}, f_erro
         end
     end
 
-    # TODO: this doesn't seem optimal, wouldn't we want to take the n largest errors of alternating sign?
-    # choose degree+2 (==n) consecutive points that include the maximum error 
-    idx = argmax(abs.(err_next))
-    max_err = abs(err_next[idx])
+    max_err = maximum(abs.(err_next))
+
     if n <= length(x_next)
-        # if we can choose points (i.e. there are more than necessary)
-        # take the points at most n to the left of the max
-        d = max(idx - (n-1), 1)
-        x_next = x_next[d:d+(n-1)]
+        if selection == :contiguous
+            x_next = compute_best_alternating_sequence_contiguous(x_next, err_next, n)
+        elseif selection == :dp
+            x_next = compute_best_alternating_sequence_dp(x_next, err_next, n)
+        elseif selection == :dpmax
+            x_next = compute_best_alternating_sequence_dp_force_max(x_next, err_next, n)
+        else
+            @assert false "Selection method $selection not known, choose either :contiguous, :dp or :dpmax"
+        end
     end 
 
     return x_next, max_err
+end
+
+
+"""
+Selects n points from a sequence of alternating-sign errors using a contiguous window.
+
+Chooses n consecutive points that include the maximum error.
+
+args:
+    x     - sorted vector of candidate points (alternating sign errors)
+    err   - corresponding error values (alternating in sign)
+    n     - number of points to select
+returns:
+    selected x points
+"""
+function compute_best_alternating_sequence_contiguous(x::AbstractVector, err::AbstractVector, n::Integer)
+    idx = argmax(abs.(err))
+    d = max(idx - (n-1), 1)
+    x_next = x[d:d+(n-1)]
+    return x_next 
+end
+
+"""
+Selects n points from a sequence of alternating-sign errors using dynamic programming.
+
+Finds subset of size n that maximizes the minimum absolute error.
+We always include the point with maximum absolute error.
+
+args:
+    x     - sorted vector of candidate points (alternating sign errors)
+    err   - corresponding error values (alternating in sign)
+    n     - number of points to select
+returns:
+    selected x points
+"""
+function compute_best_alternating_sequence_dp(x::AbstractVector, err::AbstractVector, n::Integer)
+    m = length(x)
+    abs_err = abs.(err)
+    idx = argmax(abs_err)
+
+    # dynamic programming score: dp[i, j] --> best score achievable by selecting j points from x[1:i], when x[i] is last selected point.
+    dp     = fill(-Inf, m, n)
+    # for each entry in dp, parent stores the last selected point.
+    # i.e. parent[i, j] = k means that before selecting x[i], we selected x[j].
+    # to reconstruct the solution, we can then look at x[i-1, k] and its parent.
+    parent = fill(   0, m, n)
+
+    # init
+    # every point gets its own absolute error as score
+    # parent[i, 1] = 0 as there is no previous point
+    for i in 1:m
+        dp[i, 1] = abs_err[i]
+    end
+
+    for j in 2:n
+        for i in j:m
+            for k in (j-1):(i-1)
+                # we need to skip an even number of points to preserve the alternating sign condition
+                if isodd(i - k)
+                    # compute minimum absolute error over the set under consideration
+                    score = min(dp[k, j-1], abs_err[i])
+                    if score > dp[i, j]
+                        # want to find maximum of min-abs-error, so only store if better
+                        dp[i, j] = score
+                        parent[i, j] = k
+                    end
+                end
+            end
+        end
+    end
+
+    function reconstruct(endpoint)
+        path = Vector{Int}(undef, n)
+        path[n] = endpoint
+        for j in n:-1:2
+            path[j-1] = parent[path[j], j]
+        end
+        return path
+    end
+
+    best_score = -Inf
+    best_path  = nothing
+    for i in idx:m
+        # for i == idx, we have the path that ends in idx and contains n points
+        if dp[i, n] > best_score
+            path = reconstruct(i)
+            if idx in path
+                best_score = dp[i, n]
+                best_path  = path
+            end
+        end
+    end
+
+    return x[best_path]
+end
+
+"""
+Computes DP table where dp[i, j] = best bottleneck score selecting j points from
+the sequence, with the last point at index i. parent[i, j] stores the previous index.
+Points can only be selected with odd gaps between them (to preserve alternating signs).
+"""
+function compute_dp(abs_err::AbstractVector)
+    m = length(abs_err)
+    n = m  # we compute all possible selection sizes
+    dp     = fill(-Inf, m, n)
+    parent = fill(0,       m, n)
+
+    for i in 1:m
+        dp[i, 1] = abs_err[i]
+    end
+
+    for j in 2:n
+        for i in j:m
+            for k in (j-1):(i-1)
+                if isodd(i - k)
+                    score = min(dp[k, j-1], abs_err[i])
+                    if score > dp[i, j]
+                        dp[i, j]  = score
+                        parent[i, j] = k
+                    end
+                end
+            end
+        end
+    end
+
+    return dp, parent
+end
+
+function reconstruct(parent::AbstractMatrix, endpoint::Integer, j::Integer)
+    path = Vector{Int}(undef, j)
+    path[j] = endpoint
+    for jj in j:-1:2
+        path[jj-1] = parent[path[jj], jj]
+    end
+    return path
+end
+
+function compute_best_alternating_sequence_dp_force_max(x::AbstractVector, err::AbstractVector, n::Integer)
+    m = length(x)
+    abs_err = abs.(err)
+    idx = argmax(abs_err)
+
+    # we want to force the point with max abs error to be included in the subset, so we search for
+    # two subsets of alternating error. Once going left and once going right from that point.
+    # Left DP: select j points ending at idx, i.e. within x[1:idx]
+    dp_left,  parent_left  = compute_dp(abs_err[1:idx])
+    # Right DP: select j points ending at idx, i.e. within x[idx:m] (reversed)
+    dp_right, parent_right = compute_dp(abs_err[idx:m][end:-1:1])
+
+    best_score = -Inf
+    best_j     = -1
+    n_right    = length(idx:m)
+
+    for j in 1:n
+        # search over all possible lengths of the sets.
+        # if j points are included in the left subset, then we need to include n-j in the right subset
+        # actually, we need n-j+1 points, because the point with max_error is counted twice
+        nj = n - j + 1  # points to the right of (and including) idx
+        if (j > idx) || (nj > n_right)
+            # - there can be at most idx points in the left subset
+            # - there can be at most n_right points in the right subset
+            # ==> skip iterations with invalid indices
+            continue 
+        end
+        if dp_left[idx, j] == -Inf || dp_right[n_right, nj] == -Inf
+            continue
+        end
+        score = min(dp_left[idx, j], dp_right[n_right, nj])
+        if score > best_score
+            best_score = score
+            best_j     = j
+        end
+    end
+
+    nj         = n - best_j + 1
+    left_path  = reconstruct(parent_left,  idx,     best_j)
+    right_path = reconstruct(parent_right, n_right, nj)
+
+    # right_path is in reversed index space (relative to idx:m), un-reverse it
+    right_path = (idx - 1) .+ (n_right + 1 .- right_path)[end:-1:1]
+
+    # Combine, dropping the duplicate idx
+    full_path = [left_path; right_path[2:end]]
+    return x[full_path]
 end
 
 
@@ -386,7 +573,7 @@ kwargs:
     tol - stop iterations, if (ϵ_max - h) / fnorm <= tol
     cheby - whether to use chebyshev or monomial form of polynomials (default: true)
 """
-function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max_iter=10, tol=N(1e-10), plotting=false, cheby=true) where N<:Number
+function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max_iter=10, tol=N(1e-10), selection=:contiguous, plotting=false, cheby=true) where N<:Number
     @assert l <= u "Approximation domain must be non-degenerate! Got [$l, $u]"
     @assert max_iter > 0 "max_iter > 0 required! Got $max_iter"
 
@@ -430,7 +617,7 @@ function remez(f, f_error, f_norm, l::N, u::N, degree::Integer; verbosity=0, max
             p = chebyshev_approximation_vecfun(x -> barycentric_interpolation(x, p_cur, x_cur, w), l, u, degree)
         end
         
-        x_next, ϵ_max = update_points(x_cur, h, p, f_error, l, u)
+        x_next, ϵ_max = update_points(x_cur, h, p, f_error, l, u, selection=selection)
         if ϵ_max / fnorm > 1e5
             x_next, ϵ_max = update_points(x_cur, h, p, f_error, l, u, method=:one_point_exchange)
             verbosity > 2 && println("\tONE_POINT_EXCHANGE")
@@ -580,7 +767,7 @@ returns:
     β - coefficient of 1 in monomial form or coefficient of T₀(x) for scaling to x ∈ [l, u] for chebyshev form
     ϵ - maximum approximation error of the linear function given by α and β
 """
-function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), û=one(N); verbosity=0, tol=N(1e-10), max_iter=10, cheby=true) where N<:Number
+function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), û=one(N); verbosity=0, tol=N(1e-10), selection=:contiguous, max_iter=10, cheby=true) where N<:Number
     # println("l = $l, u = $u, l̂ = $l̂, û = $û, ps = $ps")
     if cheby 
         # need to get polynomials to common domain, s.t. we can just add and subtract the coefficient vectors.
@@ -614,14 +801,14 @@ function approx_polynomial_lin(ps::AbstractVector{N}, l::N, u::N, l̂=-one(N), u
         errfun = (p, l, u) -> poly_error(ps, p, l, u)
     end 
 
-    p_lin, ϵ = remez(poly, errfun, poly_norm, l, u, 1, verbosity=verbosity, tol=tol, max_iter=max_iter, cheby=cheby)
+    p_lin, ϵ = remez(poly, errfun, poly_norm, l, u, 1, verbosity=verbosity, tol=tol, selection=selection, max_iter=max_iter, cheby=cheby)
     β, α = p_lin
 
     return α, β, ϵ
 end
 
 
-function approx_relu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10), max_iter=10, plotting=false, cheby=true) where N<:Number
+function approx_relu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10), max_iter=10, selection=:contiguous, plotting=false, cheby=true) where N<:Number
     f = x -> max.(0, x)
 
     if u <= 0
@@ -645,9 +832,9 @@ function approx_relu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10)
         ϵ = zero(N)
     else
         if cheby
-            p, ϵ = remez(f, relu_error_cheby, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=true)
+            p, ϵ = remez(f, relu_error_cheby, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, selection=selection, max_iter=max_iter, plotting=plotting, cheby=true)
         else
-            p, ϵ = remez(f, relu_error, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=false)
+            p, ϵ = remez(f, relu_error, relu_norm, l, u, degree, verbosity=verbosity, tol=tol, selection=selection, max_iter=max_iter, plotting=plotting, cheby=false)
         end
     end
 
@@ -655,7 +842,7 @@ function approx_relu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10)
 end
 
 
-function approx_gelu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10), max_iter=10, plotting=false, cheby=true) where N<:Number
+function approx_gelu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10), selection=:contiguous, max_iter=10, plotting=false, cheby=true) where N<:Number
     @assert cheby "GeLU Remez approximation is only defined for Chebyshev basis."
     if u <= GELU_PP.a
         # just use the linear approximation gelu(x) ≈ 0 for x <= a
@@ -672,7 +859,7 @@ function approx_gelu_poly(l::N, u::N, degree::Integer; verbosity=0, tol=N(1e-10)
     else
         f_gpp = make_eval_gelu_piecewise_poly(GELU_PP)
         errfun = (p, l, u) -> piecewise_poly_error(GELU_PP, p, l, u)
-        p, ϵ = remez(f_gpp, errfun, poly_norm, l, u, degree, verbosity=verbosity, tol=tol, max_iter=max_iter, plotting=plotting, cheby=cheby)
+        p, ϵ = remez(f_gpp, errfun, poly_norm, l, u, degree, verbosity=verbosity, tol=tol, selection=selection, max_iter=max_iter, plotting=plotting, cheby=cheby)
     end
 
     ϵ += GELU_PP.ϵ

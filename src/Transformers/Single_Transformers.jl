@@ -1,0 +1,280 @@
+function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXLinear{S1}, inputs :: Vector{Zonotope}) where {S1}
+    @assert length(inputs) == 1 "Dense layer should have exactly one input"
+    @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output"
+    ZoutRef = ZoutRefVec[1]
+    Zin = inputs[1]
+    return propagate_layer!(ZoutRef, L, Zin)
+end
+
+function propagate_layer!(ZoutRef :: Zonotope, L :: ONNXLinear{S1}, Zin :: Zonotope) where {S1}
+    # Zout must have exactly the same ids as Zin
+    # @assert all(ZoutRef.generator_ids .== Zin.generator_ids) "Zonotope generator IDs do not match during Dense propagation!"
+    for i in 1:length(Zin.Gs)
+        mul!(ZoutRef.Gs[i], L.dense.weight, Zin.Gs[i])
+    end
+    mul!(ZoutRef.c, L.dense.weight, Zin.c)
+    ZoutRef.c .+= L.dense.bias
+end
+
+function propagate_layer!(ZoutRef :: Zonotope, L :: ONNXAddConst{S1}, Zin :: Zonotope) where {S1}
+    # Zout must have exactly the same ids as Zin
+    # @assert all(ZoutRef.generator_ids .== Zin.generator_ids) "Zonotope generator IDs do not match during Dense propagation!"
+    for i in 1:length(Zin.Gs)
+        ZoutRef.Gs[i] .= Zin.Gs[i]
+    end
+    ZoutRef.c .= Zin.c .+ L.c
+end
+
+function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXRelu{S}, inputs :: Vector{Zonotope}; lower=nothing, upper=nothing) where {S}
+    @assert length(inputs) == 1 "Dense layer should have exactly one input"
+    @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output"
+    ZoutRef = ZoutRefVec[1]
+    Zin = inputs[1]
+    return propagate_layer!(ZoutRef, L, Zin; lower=lower, upper=upper)
+end
+
+function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXRelu{S}, Zin :: Zonotope; lower=nothing, upper=nothing) where {S}
+    if isnothing(lower) || isnothing(upper)
+        bounds = zono_bounds(Zin)
+        lower = @view bounds[:,1]
+        upper = @view bounds[:,2]
+    end
+
+    dim = length(lower)
+    crossing = @simd_bool_expr dim ((lower < 0.0) & (upper > 0.0))
+    α = clamp.(upper./(upper.-lower),0.0,1.0)
+    # Use is_onesided to compute 
+    λ = ifelse.(crossing, α, ifelse.(lower .>= 0.0, 1.0, 0.0))
+
+    new_gens = count(crossing)
+    
+    γ = 0.5 .* max.(-λ .* lower,0.0,((-).(1.0,λ)).*upper)  # Computed offset (-λl/2)
+
+    ZoutRef.c .= λ .* Zin.c .+ crossing.*γ
+
+    indices = intersect_indices(ZoutRef.generator_ids, Zin.generator_ids)
+    if VeryDiff.NEW_HEURISTIC[]
+        influence_new = ZoutRef.influence
+        column_pos = size(influence_new[ZoutRef.owned_generators],2) - new_gens + 1
+        # @debug "Adding $new_gens new columns at position $column_pos to influence matrix of owned generator ID $(ZoutRef.generator_ids[ZoutRef.owned_generators])"
+        # @debug "Sizes of influence matrices: $([size(inf) for inf in Zin.influence])"
+        # Other influence matrices remain the same
+        # Only need to update the owned generator influence matrix
+        if !isnothing(Zin.owned_generators) && Zin.owned_generators == attempt_find_index_position(Zin.generator_ids, ZoutRef.generator_ids[ZoutRef.owned_generators])
+            influence_new[ZoutRef.owned_generators][:, 1:column_pos-1] .= Zin.influence[Zin.owned_generators]
+        end
+        # @debug "Size of owned influence matrix after copy: $(size(influence_new[ZoutRef.owned_generators]))"
+        influence_new[ZoutRef.owned_generators][:,column_pos:end] .= 0.0
+        bounds_range = upper[crossing] .- lower[crossing]
+        @inbounds for (idx, g) in enumerate(Zin.Gs)
+            influence_new[ZoutRef.owned_generators][:,column_pos:end] .+= Zin.influence[idx] * abs.((@view g[crossing,:]) ./ bounds_range)'
+        end
+    else
+        influence_new = Zin.influence
+    end
+
+    num_new_gens = count(crossing)
+
+    updateGeneratorsMul!(ZoutRef.Gs, indices, Zin.Gs, λ, :)
+    ZoutRef.Gs[ZoutRef.owned_generators][:,(end-num_new_gens+1):end] .= 0.0
+    generator_offset = size(ZoutRef.Gs[ZoutRef.owned_generators],2) - num_new_gens
+    A = ZoutRef.Gs[ZoutRef.owned_generators]
+    @inbounds for (i, row) in enumerate(findall(crossing))
+        A[row, (generator_offset + i)] = abs(γ[row])
+    end
+end
+
+function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXSigmoid{S}, inputs :: Vector{Zonotope}; lower=nothing, upper=nothing) where {S}
+    @assert length(inputs) == 1 "Sigmoid layer should have exactly one input"
+    @assert length(ZoutRefVec) == 1 "Sigmoid layer should have exactly one output"
+    ZoutRef = ZoutRefVec[1]
+    Zin = inputs[1]
+    return propagate_layer!(ZoutRef, L, Zin; lower=lower, upper=upper)
+end
+
+function σ(x)
+    return 1 ./ (1 .+ exp.(-x))
+end
+
+function σ´(x)
+    return σ(x) .* (1 .- σ(x))
+end
+
+function solve_σ´(λ, use_upper)
+    if any(λ.==0)
+        throw("λ is zero")
+    end
+    if use_upper
+        return log.((1 .- 2 .* λ  .+ sqrt.(1 .- 4 .* λ)) ./ (2 .* λ))
+    else
+        return log.((1 .- 2 .* λ .- sqrt.(1 .- 4 .* λ)) ./ (2 .* λ))
+    end
+end
+
+function fsecant_slope(lower, upper)
+    return clamp.((σ(upper) .- σ(lower)) ./ (upper .- lower), 0, 0.25)
+end
+
+function iterate_tagent_point(start, fix_point, use_upper)
+    tangent_point = start
+    solve_derivative = trues(length(start))
+    slope = zeros(length(start))
+    for i in 1:10
+        slope[solve_derivative] .= clamp.((σ(tangent_point[solve_derivative]) .- σ(fix_point[solve_derivative])) ./ (tangent_point[solve_derivative] .- fix_point[solve_derivative]), 0, 0.25)
+        solve_derivative .= (slope .> 1e-4)
+        tangent_point[solve_derivative] .= solve_σ´(slope[solve_derivative], use_upper)
+        tangent_point[.!solve_derivative] .= start[.!solve_derivative]
+    end
+    return tangent_point
+end
+
+function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXSigmoid{S}, Zin :: Zonotope; lower=nothing, upper=nothing) where {S}
+    if isnothing(lower) || isnothing(upper)
+        bounds = zono_bounds(Zin)
+        lower = @view bounds[:,1]
+        upper = @view bounds[:,2]
+    end
+    
+    dim = length(lower)
+    new_gens = dim
+    only_center = (lower .== upper) # handling of this case can be optimised
+
+    #calc secant slope for all 
+    secant_slope = fsecant_slope(lower, upper)
+
+    #check secant slope vailidity
+    upper_derivative = σ´(upper)
+    lower_derivative = σ´(lower)
+    secant_upper = @simd_bool_expr dim (secant_slope <= upper_derivative)
+    secant_lower = @simd_bool_expr dim (secant_slope <= lower_derivative)
+
+    #setup data structures
+    iterative_slope_lower = zeros(dim)
+    iterative_slope_upper = zeros(dim)
+    iterative_slope = zeros(dim)
+    tangent_points = zeros(2, dim) #[lower tangent points ,upper tangent points]
+
+    #calc tangent points and slope iteratively
+    mask_iteration = (.!(secant_upper .|| secant_lower))
+    tangent_points[1, mask_iteration] = iterate_tagent_point(lower[mask_iteration], upper[mask_iteration], false) 
+    tangent_points[2, mask_iteration] = iterate_tagent_point(upper[mask_iteration], lower[mask_iteration], true)
+    iterative_slope_lower[mask_iteration] = σ´(tangent_points[1, mask_iteration])
+    iterative_slope_upper[mask_iteration] = σ´(tangent_points[2, mask_iteration])
+
+    #choose smaller iterative slope
+    mask_lower = @simd_bool_expr dim (iterative_slope_lower <= iterative_slope_upper)
+    mask_upper = @simd_bool_expr dim (iterative_slope_lower > iterative_slope_upper)
+    iterative_slope[mask_lower] = iterative_slope_lower[mask_lower]
+    iterative_slope[mask_upper] = iterative_slope_upper[mask_upper]
+
+    #set tangent points where opposite slope is used using σ'(x) = σ'(-x)
+    tangent_points[1, mask_upper] = .-tangent_points[2, mask_upper]
+    tangent_points[2, mask_lower] = .-tangent_points[1, mask_lower] 
+
+    #set tangent points where secant slope is used
+    secant_slope_zero = (secant_slope .== 0) 
+    tangent_points[1, secant_upper .&& .!secant_slope_zero] = solve_σ´(secant_slope[secant_upper .&& .!secant_slope_zero], false)
+    tangent_points[1, secant_upper .&& secant_slope_zero] = lower[secant_upper .&& secant_slope_zero]
+    tangent_points[1, secant_lower] = upper[secant_lower]
+    tangent_points[2, secant_upper] = upper[secant_upper]
+    tangent_points[2, secant_lower .&& .!secant_slope_zero] = solve_σ´(secant_slope[secant_lower .&& .!secant_slope_zero], true)
+    tangent_points[2, secant_lower .&& secant_slope_zero] = upper[secant_lower .&& secant_slope_zero]
+
+    #calc final slope for all
+    λ = ifelse.(secant_upper .|| secant_lower, secant_slope, iterative_slope)
+
+    #calc and apply center offset
+    lower_tangent_points = @view tangent_points[1, :]
+    upper_tangent_points = @view tangent_points[2, :]
+    σ_upper = σ(upper_tangent_points)
+    σ_lower = σ(lower_tangent_points)
+    #1e-7 to account for floating point precision
+    ν = 0.5 .* (.-λ .* upper_tangent_points .+ σ_upper .+ 1e-7 .- λ .* lower_tangent_points .+ σ_lower .- 1e-7)
+    ZoutRef.c .= λ .* Zin.c .+ ν
+    ZoutRef.c[only_center] .= σ(Zin.c[only_center])
+
+    #calc new generator
+    μ = 0.5 .* (.-λ .* upper_tangent_points .+ σ_upper .+ 1e-7 .+ λ .* lower_tangent_points .- σ_lower .+ 1e-7)
+    μ[only_center] .= 0 # one additional column per only center affine form 
+    
+
+    indices = intersect_indices(ZoutRef.generator_ids, Zin.generator_ids)
+    if VeryDiff.NEW_HEURISTIC[]
+        influence_new = ZoutRef.influence
+        column_pos = size(influence_new[ZoutRef.owned_generators],2) - new_gens + 1
+        if !isnothing(Zin.owned_generators) && Zin.owned_generators == attempt_find_index_position(Zin.generator_ids, ZoutRef.generator_ids[ZoutRef.owned_generators])
+            influence_new[ZoutRef.owned_generators][:, 1:column_pos-1] .= Zin.influence[Zin.owned_generators]
+        end
+        influence_new[ZoutRef.owned_generators][:,column_pos:end] .= 0.0
+        bounds_range = upper .- lower
+        @inbounds for (idx, g) in enumerate(Zin.Gs)
+            influence_new[ZoutRef.owned_generators][:,column_pos:end] .+= Zin.influence[idx] * abs.((g) ./ bounds_range)'
+        end
+    else
+        influence_new = Zin.influence
+    end
+
+    num_new_gens = dim
+
+    λ[only_center] .= 1
+    updateGeneratorsMul!(ZoutRef.Gs, indices, Zin.Gs, λ, :) #apply slope
+    ZoutRef.Gs[ZoutRef.owned_generators][:,(end-num_new_gens+1):end] .= 0.0
+    generator_offset = size(ZoutRef.Gs[ZoutRef.owned_generators],2) - num_new_gens
+    A = ZoutRef.Gs[ZoutRef.owned_generators]
+    @inbounds for row in axes(A, 1)
+        A[row, (generator_offset + row)] = abs(μ[row]) #add new generators
+    end
+end
+
+function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXLeakyRelu{S,F}, inputs :: Vector{Zonotope}; lower=nothing, upper=nothing) where {S, F}
+    @assert length(inputs) == 1 "LeakyReLU layer should have exactly one input"
+    @assert length(ZoutRefVec) == 1 "LeakyReLU layer should have exactly one output"
+    ZoutRef = ZoutRefVec[1]
+    Zin = inputs[1]
+    return propagate_layer!(ZoutRef, L, Zin; lower=lower, upper=upper)
+end
+
+function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXLeakyRelu{S,F}, Zin :: Zonotope; lower=nothing, upper=nothing) where {S,F}
+    if isnothing(lower) || isnothing(upper)
+        bounds = zono_bounds(Zin)
+        lower = @view bounds[:,1]
+        upper = @view bounds[:,2]
+    end
+    
+    alpha = convert(Float64,_L.alpha)
+    dim = length(lower)
+    crossing = @simd_bool_expr dim ((lower < 0.0) & (upper > 0.0))
+    α = (upper .- (alpha .* lower))./(upper .- lower) #slope any
+    λ = ifelse.(crossing, α, ifelse.(lower .>= 0.0, 1.0, alpha)) #final slope
+
+    new_gens = count(crossing)
+    
+    γ = 0.5 .* ((-λ .* lower) .+ (alpha .* lower)) #offset and new generator
+    ZoutRef.c .= λ .* Zin.c .+ crossing.*γ #apply offset
+
+    indices = intersect_indices(ZoutRef.generator_ids, Zin.generator_ids)
+    if VeryDiff.NEW_HEURISTIC[]
+        influence_new = ZoutRef.influence
+        column_pos = size(influence_new[ZoutRef.owned_generators],2) - new_gens + 1
+        if !isnothing(Zin.owned_generators) && Zin.owned_generators == attempt_find_index_position(Zin.generator_ids, ZoutRef.generator_ids[ZoutRef.owned_generators])
+            influence_new[ZoutRef.owned_generators][:, 1:column_pos-1] .= Zin.influence[Zin.owned_generators]
+        end
+        influence_new[ZoutRef.owned_generators][:,column_pos:end] .= 0.0
+        bounds_range = upper[crossing] .- lower[crossing]
+        @inbounds for (idx, g) in enumerate(Zin.Gs)
+            influence_new[ZoutRef.owned_generators][:,column_pos:end] .+= Zin.influence[idx] * abs.((@view g[crossing,:]) ./ bounds_range)'
+        end
+    else
+        influence_new = Zin.influence
+    end
+
+    num_new_gens = count(crossing)
+
+    updateGeneratorsMul!(ZoutRef.Gs, indices, Zin.Gs, λ, :) #apply slope
+    ZoutRef.Gs[ZoutRef.owned_generators][:,(end-num_new_gens+1):end] .= 0.0
+    generator_offset = size(ZoutRef.Gs[ZoutRef.owned_generators],2) - num_new_gens
+    A = ZoutRef.Gs[ZoutRef.owned_generators]
+    @inbounds for (i, row) in enumerate(findall(crossing)) 
+        A[row, (generator_offset + i)] = abs(γ[row]) #add new generators
+    end
+end

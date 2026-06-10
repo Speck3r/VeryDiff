@@ -6,51 +6,31 @@ using LinearAlgebra
 using VNNLib
 #using ThreadPinning
 
-using GLPK
+const NEW_HEURISTIC = Ref{Bool}(true)
 
-NEW_HEURISTIC = true
-USE_GUROBI = true
+const USE_DIFFZONO = Ref{Bool}(true)
 
-USE_DIFFZONO = true
-
-# We have our own multithreadding so we don't want to use BLAS multithreadding
 function __init__()
     BLAS.set_num_threads(1)
-    if USE_GUROBI
-        GRB_ENV[] = Gurobi.Env()
-        GRBsetintparam(GRB_ENV[], "OutputFlag", 0)
-        GRBsetintparam(GRB_ENV[], "LogToConsole", 0)
-        GRBsetintparam(GRB_ENV[], "Threads", 0)
-    end
-    #GRBsetintparam(GRB_ENV[], "Method", 2)
-    #       mnist_19_local_21.vnnlib        mnist_18_local_18
-    #0 :    0.018826400587219343s/loop      0.03304489948205128s/loop
-    #1 :    0.01705984154058722s/loop       0.03352098044717949s/loop
-    #2 :    0.020955224224525042s/loop      0.038390683782564106s/loop
 end
 
 #pinthreads(:cores)
 
-FIRST_ROUND = true
+const FIRST_ROUND = Ref{Bool}(true)
 
-using TimerOutputs
-const to = TimerOutput()
+include("Util/simd_bool.jl")
+include("Debugger/Debugger.jl")
+include("Definitions/Definitions.jl")
+using .Definitions
 
-using JuMP
-#using GLPK
-using Gurobi
+include("Transformers/Transformers.jl")
+using .Transformers
 
-const GRB_ENV = Ref{Any}(nothing)
-
-include("Debugger.jl")
-include("Definitions.jl")
-include("Util.jl")
-include("Network.jl")
-include("Zonotope.jl")
-include("Layers_Zonotope.jl")
-include("Layers_DiffZonotope.jl")
 include("MultiThreadding.jl")
-include("Properties.jl")
+
+include("Properties/Properties.jl")
+using .Properties
+
 include("Verifier.jl")
 include("Cli.jl")
 

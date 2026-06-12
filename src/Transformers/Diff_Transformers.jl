@@ -838,15 +838,15 @@ function calc_tangent_point_upper_opposing!(tangent_points_upper, lower_slope, u
     tangent_points_upper[check_out_of_bounds] = ∂upper[check_out_of_bounds]
 end
 
-#1e-7 to account for floating point precision
+#1e-4 to account for floating point precision
 function fν_any_all_any(λ, t_upper, t_lower, upper₁, lower₁, upper_func, lower_func, mask)
-    return 0.5 .* (.-(@view λ[mask]) .* (@view t_upper[mask]) .+ upper_func((@view upper₁[mask]), (@view t_upper[mask])) .+ 1e-7
-                                     .- (@view λ[mask]) .* (@view t_lower[mask]) .+ lower_func((@view lower₁[mask]), (@view t_lower[mask])) .- 1e-7)
+    return 0.5 .* (.-(@view λ[mask]) .* (@view t_upper[mask]) .+ upper_func((@view upper₁[mask]), (@view t_upper[mask])) .+ 1e-4
+                                     .- (@view λ[mask]) .* (@view t_lower[mask]) .+ lower_func((@view lower₁[mask]), (@view t_lower[mask])) .- 1e-4)
 end
 
 function fμ_any_all_any(λ, t_upper, t_lower, upper₁, lower₁, upper_func, lower_func, mask)
-    return 0.5 .* (.-(@view λ[mask]) .* (@view t_upper[mask]) .+ upper_func((@view upper₁[mask]), (@view t_upper[mask])) .+ 1e-7
-                                     .+ (@view λ[mask]) .* (@view t_lower[mask]) .- lower_func((@view lower₁[mask]), (@view t_lower[mask])) .+ 1e-7)
+    return 0.5 .* (.-(@view λ[mask]) .* (@view t_upper[mask]) .+ upper_func((@view upper₁[mask]), (@view t_upper[mask])) .+ 1e-4
+                                     .+ (@view λ[mask]) .* (@view t_lower[mask]) .- lower_func((@view lower₁[mask]), (@view t_lower[mask])) .+ 1e-4)
 end
 
 function fuse_extremest(lower₁, to_check, upper₁)
@@ -914,21 +914,22 @@ function fmin_z_value(lower₁, upper₁, ∂upper)
 end
 
 function calc_lower_offset!(lower_offset, λ, lower₁, upper₁, ∂lower, ∂upper)
-   option_a = solve_∂σ_diff_∂y_lower(lower₁, λ)
-   option_b = solve_∂σ_diff_∂y_lower(upper₁, λ)
-   offset_a = .-λ .* option_a .+ σ_diff(lower₁, option_a)
-   offset_b = .-λ .* option_b .+ σ_diff(upper₁, option_b)
-   offset_c = .-λ .* ∂upper .+ fmin_z_value(lower₁, upper₁, ∂upper)
-   a_valid = (option_a .<= ∂upper) .&& (option_a .>= ∂lower)
-   b_valid = (option_b .<= ∂upper) .&& (option_b .>= ∂lower)
-   a_mask = a_valid .&& .!b_valid
-   b_mask = .!a_valid .&& b_valid
-   a_and_b = a_valid .&& b_valid
-   neither = .!a_valid .&& .!b_valid
-   lower_offset[a_mask] = min.((@view offset_a[a_mask]), (@view offset_c[a_mask]))
-   lower_offset[b_mask] = min.((@view offset_b[b_mask]), (@view offset_c[b_mask]))
-   lower_offset[a_and_b] = min.(min.((@view offset_a[a_and_b]), (@view offset_b[a_and_b])), (@view offset_c[a_and_b]))
-   lower_offset[neither] = offset_c[neither]
+    option_a = solve_∂σ_diff_∂y_lower(lower₁, λ)
+    option_b = solve_∂σ_diff_∂y_lower(upper₁, λ)
+    offset_a = .-λ .* option_a .+ σ_diff(lower₁, option_a)
+    offset_b = .-λ .* option_b .+ σ_diff(upper₁, option_b)
+    offset_upperbound = .-λ .* ∂upper .+ fmin_z_value(lower₁, upper₁, ∂upper)
+    offset_lowerbound = .-λ .* ∂lower .+ fmin_z_value(lower₁, upper₁, ∂lower)
+    a_valid = (option_a .<= ∂upper) .&& (option_a .>= ∂lower)
+    b_valid = (option_b .<= ∂upper) .&& (option_b .>= ∂lower)
+    a_mask = a_valid .&& .!b_valid
+    b_mask = .!a_valid .&& b_valid
+    a_and_b = a_valid .&& b_valid
+    neither = .!a_valid .&& .!b_valid
+    lower_offset[a_mask] = min.(min.((@view offset_a[a_mask]), (@view offset_upperbound[a_mask])), @view offset_lowerbound[a_mask])
+    lower_offset[b_mask] = min.(min.((@view offset_b[b_mask]), (@view offset_upperbound[b_mask])), @view offset_lowerbound[b_mask])
+    lower_offset[a_and_b] = min.(min.((@view offset_a[a_and_b]), (@view offset_b[a_and_b])), min.((@view offset_upperbound[a_and_b]), @view offset_lowerbound[a_and_b]))
+    lower_offset[neither] = min.(offset_upperbound[neither], offset_lowerbound[neither])
 end
 
 function fmax_z_value(lower₁, upper₁, ∂lower)
@@ -940,17 +941,18 @@ function calc_upper_offset!(upper_offset, λ, lower₁, upper₁, ∂lower, ∂u
     option_b = solve_∂σ_diff_∂y_upper(upper₁, λ)
     offset_a = .-λ .* option_a .+ σ_diff(lower₁, option_a)
     offset_b = .-λ .* option_b .+ σ_diff(upper₁, option_b)
-    offset_c = .-λ .* ∂upper .+ fmax_z_value(lower₁, upper₁, ∂lower)
+    offset_lowerbound = .-λ .* ∂lower .+ fmax_z_value(lower₁, upper₁, ∂lower)
+    offset_upperbound = .-λ .* ∂upper .+ fmax_z_value(lower₁, upper₁, ∂upper)
     a_valid = (option_a .<= ∂upper) .&& (option_a .>= ∂lower)
     b_valid = (option_b .<= ∂upper) .&& (option_b .>= ∂lower)
     a_mask = a_valid .&& .!b_valid
     b_mask = .!a_valid .&& b_valid
     a_and_b = a_valid .&& b_valid
     neither = .!a_valid .&& .!b_valid
-    upper_offset[a_mask] = max.((@view offset_a[a_mask]), (@view offset_c[a_mask]))
-    upper_offset[b_mask] = max.((@view offset_b[b_mask]), (@view offset_c[b_mask]))
-    upper_offset[a_and_b] = max.(max.((@view offset_a[a_and_b]), (@view offset_b[a_and_b])), (@view offset_c[a_and_b]))
-    upper_offset[neither] = offset_c[neither]
+    upper_offset[a_mask] = max.(max.((@view offset_a[a_mask]), (@view offset_lowerbound[a_mask])), (@view offset_upperbound[a_mask]))
+    upper_offset[b_mask] = max.(max.((@view offset_b[b_mask]), (@view offset_lowerbound[b_mask])), (@view offset_upperbound[b_mask]))
+    upper_offset[a_and_b] = max.(max.((@view offset_a[a_and_b]), (@view offset_b[a_and_b])), max.((@view offset_lowerbound[a_and_b]),(@view offset_upperbound[a_and_b])))
+    upper_offset[neither] = max.(offset_lowerbound[neither], offset_upperbound[neither])
 end
 
 function calc_max_z_value!(max_z_value, tangent_points, upper₁, lower₁)    
@@ -1120,6 +1122,8 @@ function propagate_layer!(
         
         # Reset to zero
         Zout.∂Z.c .= 0.0
+
+        #zero_diff case
         for g in Zout.∂Z.Gs
             g[zero_diff, :] .= 0.0
         end
@@ -1251,8 +1255,8 @@ function propagate_layer!(
             calc_lower_offset!(lower_offset, λ_pos_all_any, lower₁_pos_all_any, upper₁_pos_all_any, ∂lower_pos_all_any, ∂upper_pos_all_any)
             calc_max_z_value!(max_z_value, tangent_points_upper, upper₁_pos_all_any, lower₁_pos_all_any)
 
-            ν_pos_all_any .= 0.5 .* (.-λ_pos_all_any .* tangent_points_upper .+ max_z_value .+ 1e-7 .+ lower_offset .- 1e-7)
-            μ_pos_all_any .= 0.5 .* (.-λ_pos_all_any .* tangent_points_upper .+ max_z_value .+ 1e-7 .- lower_offset .+ 1e-7)
+            ν_pos_all_any .= 0.5 .* (.-λ_pos_all_any .* tangent_points_upper .+ max_z_value .+ 1e-4 .+ lower_offset .- 1e-4)
+            μ_pos_all_any .= 0.5 .* (.-λ_pos_all_any .* tangent_points_upper .+ max_z_value .+ 1e-4 .- lower_offset .+ 1e-4)
         end
         μ_all_cases[pos_all_any] .= μ_pos_all_any 
 
@@ -1294,8 +1298,8 @@ function propagate_layer!(
             calc_upper_offset!(upper_offset, λ_neg_all_any, lower₁_neg_all_any, upper₁_neg_all_any, ∂lower_neg_all_any, ∂upper_neg_all_any)
             calc_min_z_value!(min_z_value, tangent_points_lower, upper₁_neg_all_any, lower₁_neg_all_any)
             
-            ν_neg_all_any .= 0.5 .* (.-λ_neg_all_any .* tangent_points_lower .+ min_z_value .- 1e-7 .+ upper_offset .+ 1e-7)
-            μ_neg_all_any .= 0.5 .* (λ_neg_all_any .* tangent_points_lower .- min_z_value .+ 1e-7 .+ upper_offset .+ 1e-7)
+            ν_neg_all_any .= 0.5 .* (.-λ_neg_all_any .* tangent_points_lower .+ min_z_value .- 1e-4 .+ upper_offset .+ 1e-4)
+            μ_neg_all_any .= 0.5 .* (λ_neg_all_any .* tangent_points_lower .- min_z_value .+ 1e-4 .+ upper_offset .+ 1e-4)
 
         end
 
@@ -1391,10 +1395,10 @@ function propagate_layer!(
             λ_x_all_all_np .= λ_x
             λ_y_all_all_np .= λ_y
 
-            ν_all_all_np .= 0.5 .* (.-λ_x .* tangent_points_x_lower .-λ_y .* tangent_points_y_lower .+ σ_nondiff(tangent_points_x_lower, tangent_points_y_lower) .- 1e-7 
-            .- λ_x .* tangent_points_x_upper .- λ_y .* tangent_points_y_upper .+ σ_nondiff(tangent_points_x_upper, tangent_points_y_upper) .+ 1e-7)
-            μ_all_all_np .= 0.5 .* (λ_x .* tangent_points_x_lower .+ λ_y .* tangent_points_y_lower .- σ_nondiff(tangent_points_x_lower, tangent_points_y_lower) .+ 1e-7 
-            .- λ_x .* tangent_points_x_upper .- λ_y .* tangent_points_y_upper .+ σ_nondiff(tangent_points_x_upper, tangent_points_y_upper) .+ 1e-7)
+            ν_all_all_np .= 0.5 .* (.-λ_x .* tangent_points_x_lower .-λ_y .* tangent_points_y_lower .+ σ_nondiff(tangent_points_x_lower, tangent_points_y_lower) .- 1e-4 
+            .- λ_x .* tangent_points_x_upper .- λ_y .* tangent_points_y_upper .+ σ_nondiff(tangent_points_x_upper, tangent_points_y_upper) .+ 1e-4)
+            μ_all_all_np .= 0.5 .* (λ_x .* tangent_points_x_lower .+ λ_y .* tangent_points_y_lower .- σ_nondiff(tangent_points_x_lower, tangent_points_y_lower) .+ 1e-4 
+            .- λ_x .* tangent_points_x_upper .- λ_y .* tangent_points_y_upper .+ σ_nondiff(tangent_points_x_upper, tangent_points_y_upper) .+ 1e-4)
 
         end
 

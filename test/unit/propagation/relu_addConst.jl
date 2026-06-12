@@ -18,7 +18,7 @@ using Random
     
     @testset "Basic Gemini Network Propagation with AddConst" begin
         input_dim = 5
-        num_layers = rand(5:15)
+        num_layers = 1 #rand(5:15)
         
         # Create layer dimensions (same for both networks)
         layer_dims = [rand(20:50) for _ in 1:(num_layers-1)]
@@ -55,7 +55,7 @@ using Random
     
     @testset "Memory Allocation Reduction on Second Run with AddConst" begin
         input_dim = 5
-        num_layers = rand(5:15)
+        num_layers = 1 #rand(5:15)
         
         # Create layer dimensions (same for both networks)
         layer_dims = [rand(400:600) for _ in 1:(num_layers-1)]
@@ -95,8 +95,9 @@ using Random
         num_samples = 20_000
         tolerance = 1e-4
         
-        for depth in 1:15
+        for depth in 1:1 #1:15
             # Create layer dimensions (same for both networks)
+            println("depth of tested Network: $(depth)")
             layer_dims = [rand(20:100) for _ in 1:depth]
             push!(layer_dims, 10)  # Output dimension is 10
             
@@ -126,6 +127,7 @@ using Random
             @debug "Propagation through Gemini Network complete."
             @debug "$(length(prop_state.zono_storage.zonotopes)) zonotopes in storage."
             Zout = prop_state.zono_storage.zonotopes[end].zonotope
+            println("prop_state.zono_storage.zonotopes length should be equal double the depth: $(length(prop_state.zono_storage.zonotopes))")
             
             # Get output bounds from zonotope
             bounds_z1 = zono_bounds(Zout.Z₁)

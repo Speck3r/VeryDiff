@@ -1131,7 +1131,8 @@ function propagate_layer!(
         μ_all_cases = zeros(length(upper₁))
 
         #c_all_all case
-        updateGenerators!(Zout.∂Z.Gs, post_indices₂, Zout.Z₂.Gs, c_all_all)
+        #updateGenerators!(Zout.∂Z.Gs, post_indices₂, Zout.Z₂.Gs, c_all_all)
+        updateGeneratorsMul!(Zout.∂Z.Gs, post_indices₂, Zout.Z₂.Gs, (-1.0), c_all_all)
         Zout.∂Z.c[c_all_all] .= .-Zout.Z₂.c[c_all_all] .+ Zout.Z₁.c[c_all_all]
 
         #all_c_all case

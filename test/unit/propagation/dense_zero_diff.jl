@@ -20,7 +20,7 @@ using Random
     
     @testset "Basic Gemini Network Propagation" begin
         input_dim = 5
-        num_layers = 1 #rand(5:15)
+        num_layers = rand(5:15)
         
         # Create layer dimensions (same for both networks)
         layer_dims = [rand(20:50) for _ in 1:(num_layers-1)]
@@ -57,7 +57,7 @@ using Random
     
     @testset "Memory Allocation Reduction on Second Run" begin
         input_dim = 5
-        num_layers = 1 #rand(5:15)
+        num_layers = rand(5:15)
         
         # Create layer dimensions (same for both networks)
         layer_dims = [rand(400:600) for _ in 1:(num_layers-1)]
@@ -97,7 +97,7 @@ using Random
         num_samples = 20_000
         tolerance = 1e-4
         
-        for depth in 1:1 #1:15
+        for depth in 1:15
             # Create layer dimensions (same for both networks)
             layer_dims = [rand(20:100) for _ in 1:depth]
             push!(layer_dims, 10)  # Output dimension is 10

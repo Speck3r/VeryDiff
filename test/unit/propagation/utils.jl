@@ -293,3 +293,86 @@ function create_verification_task(low::Vector, high::Vector; with_secondary::Boo
         1.0
     )
 end
+
+macro simd_bool_expr(N, expr)
+    idx = gensym(:i)
+    # recursively rewrite any variable `x` into `x[idx]`
+    # except literal constants
+    function rewrite(e)
+        if e isa Symbol
+            return :( $e[$idx] )
+        elseif e isa Number || e isa String || e === nothing
+            return e
+        elseif e isa Expr
+            # recursively rewrite all arguments
+            if e.head == :call
+                return Expr(e.head, [e.args[1]; map(rewrite, e.args[2:end])...]...)
+            else
+                throw(ArgumentError("Unsupported expression head: $(e.head) in expression $(e)"))
+            end
+        else
+            return e
+        end
+    end
+
+    loop_expr = rewrite(expr)
+
+    quote
+        local out = BitVector(undef, $N)
+        @inbounds @simd for $idx = 1:$N
+            out[$idx] = $loop_expr
+        end
+        out
+    end |> esc
+end
+
+function get_sigmoid_selectors(bounds₁, bounds₂, ∂bounds)
+    lower₁ = @view bounds₁[:,1]
+    upper₁ = @view bounds₁[:,2]
+    lower₂ = @view bounds₂[:,1]
+    upper₂ = @view bounds₂[:,2]
+    ∂lower = @view ∂bounds[:,1]
+    ∂upper = @view ∂bounds[:,2]
+
+    dim = length(lower₁)
+
+    zero_diff = @simd_bool_expr dim ((∂upper == 0.0) & (∂lower == 0.0))
+
+    # Compute Phase Behaviour
+    check = copy(zero_diff)
+    
+    only_center₁ = @simd_bool_expr dim (lower₁ == upper₁)
+    only_center₂ = @simd_bool_expr dim (lower₂ == upper₂)
+    upper₁_leq0 = @simd_bool_expr dim (upper₁ <= 0.0)
+    lower₁_geq0 = @simd_bool_expr dim (lower₁ >= 0.0)
+    ∂upper_leq0 = @simd_bool_expr dim (∂upper <= 0.0)
+    ∂lower_geq0 = @simd_bool_expr dim (∂lower >= 0.0)
+    
+    # all if neuron is any of the three cases
+    c_all_all = @simd_bool_expr dim ((only_center₁) .& .!check)
+    check .|= c_all_all
+    all_c_all = @simd_bool_expr dim ((only_center₂) .& .!check)
+    check .|= all_c_all
+    all_all_neg = @simd_bool_expr dim ((∂upper_leq0) .& .!check)
+    check .|= all_all_neg
+    all_all_pos = @simd_bool_expr dim ((∂lower_geq0) .& .!check)
+    check .|= all_all_pos
+    neg_all_any = @simd_bool_expr dim ((upper₁_leq0) .& (.!∂lower_geq0) .& (.!∂upper_leq0) .& .!check)
+    check .|= neg_all_any 
+    pos_all_any = @simd_bool_expr dim ((lower₁_geq0) .& (.!∂lower_geq0) .& (.!∂upper_leq0) .& .!check)
+    check .|= pos_all_any
+    any_all_any = @simd_bool_expr dim ((.!lower₁_geq0) .& (.!upper₁_leq0) .& (.!∂lower_geq0) .& (.!∂upper_leq0) .& .!check)
+    check .|= any_all_any
+    @assert all(check) "Not all cases covered: [$(lower₁[.!check]), $(upper₁[.!check])], [$(lower₂[.!check]), $(upper₂[.!check])]"
+    return (
+        zero_diff,
+        c_all_all,
+        all_c_all,
+        all_all_neg,
+        all_all_pos,
+        neg_all_any,
+        pos_all_any,
+        any_all_any
+    )
+end
+

@@ -9,7 +9,6 @@
             mask_failed = falses(output_dim)
             for depth in 1:1 #1:15
                 # Create layer dimensions (same for both networks)
-                println("depth of tested Network: $(depth)")
                 layer_dims = [rand(output_dim:output_dim) for _ in 1:depth]
                 #push!(layer_dims, 10)  # Output dimension is 10
                 
@@ -40,7 +39,6 @@
                 @debug "Propagation through Gemini Network complete."
                 @debug "$(length(prop_state.zono_storage.zonotopes)) zonotopes in storage."
                 Zout = prop_state.zono_storage.zonotopes[end].zonotope
-                println("prop_state.zono_storage.zonotopes length should be equal double the depth: $(length(prop_state.zono_storage.zonotopes))")
                 
                 # Get output bounds from zonotope
                 bounds_z1 = zono_bounds(Zout.Z₁)
@@ -56,9 +54,9 @@
                     x = input_samples[:, i]
 
                     Zin = prop_state.zono_storage.zonotopes[1].zonotope.Z₁
-                    @assert Zin.c .+ Zin.Gs[1]*x ≈ x atol=1e-5
+                    @assert Zin.c .+ Zin.Gs[1]*x ≈ x atol=1e-8
                     Zin2 = prop_state.zono_storage.zonotopes[1].zonotope.Z₂
-                    @assert Zin2.c .+ Zin2.Gs[1]*x ≈ x atol=1e-5
+                    @assert Zin2.c .+ Zin2.Gs[1]*x ≈ x atol=1e-8
                     
                     # Propagate through N1
                     y1 = N1(x)
@@ -71,18 +69,18 @@
                     Z1_range = sum(g->sum(abs, g, dims=2),Zout.Z₁.Gs[2:end];init=zeros(size(Zout.Z₁.c)))
                     Z2_range = sum(g->sum(abs, g, dims=2),Zout.Z₂.Gs[2:end];init=zeros(size(Zout.Z₂.c)))
                     input_component = Zout.Z₁.c .+ Zout.Z₁.Gs[1]*x
-                    @test all(input_component .- Z1_range .<= y1 .+ 1e-5)
-                    @test all(y1 .<= input_component .+ Z1_range .+ 1e-5)
-                    if !all(input_component .- Z1_range .<= y1 .+ 1e-5) || !all(y1 .<= input_component .+ Z1_range .+ 1e-5)
+                    @test all(input_component .- Z1_range .<= y1 .+ 1e-8)
+                    @test all(y1 .<= input_component .+ Z1_range .+ 1e-8)
+                    if !all(input_component .- Z1_range .<= y1 .+ 1e-8) || !all(y1 .<= input_component .+ Z1_range .+ 1e-8)
                         @info "Output: $y1"
                         @info "Zonotope bounds (agnostic): $(bounds_z1)"
                         @info "Zonotope bounds (generator sum): $((input_component .- Z1_range, input_component .+ Z1_range))"
                         return
                     end
                     input_component2 = Zout.Z₂.c .+ Zout.Z₂.Gs[1]*x
-                    @test all(input_component2 .- Z2_range .<= y2 .+ 1e-5)
-                    @test all(y2 .<= input_component2 .+ Z2_range .+ 1e-5)
-                    if !all(input_component2 .- Z2_range .<= y2 .+ 1e-5) || !all(y2 .<= input_component2 .+ Z2_range .+ 1e-5)
+                    @test all(input_component2 .- Z2_range .<= y2 .+ 1e-8)
+                    @test all(y2 .<= input_component2 .+ Z2_range .+ 1e-8)
+                    if !all(input_component2 .- Z2_range .<= y2 .+ 1e-8) || !all(y2 .<= input_component2 .+ Z2_range .+ 1e-8)
                         @info "Output: $y2"
                         @info "Zonotope bounds (agnostic): $(bounds_z2)"
                         @info "Zonotope bounds (generator sum): $((input_component2 .- Z2_range, input_component2 .+ Z2_range))"
@@ -95,11 +93,11 @@
                     else
                         input_component_diff = Zout.∂Z.c
                     end
-                    @test all((input_component_diff .- diff_range) .<= ((y1 .- y2) .+ 1e-5))
-                    @test all((y1 .- y2) .<= ((input_component_diff .+ diff_range) .+ 1e-5))
-                    if !all((input_component_diff .- diff_range) .<= ((y1 .- y2) .+ 1e-5)) || !all((y1 .- y2) .<= ((input_component_diff .+ diff_range) .+ 1e-5))
+                    @test all((input_component_diff .- diff_range) .<= ((y1 .- y2) .+ 1e-8))
+                    @test all((y1 .- y2) .<= ((input_component_diff .+ diff_range) .+ 1e-8))
+                    if !all((input_component_diff .- diff_range) .<= ((y1 .- y2) .+ 1e-8)) || !all((y1 .- y2) .<= ((input_component_diff .+ diff_range) .+ 1e-8))
                         failed = true
-                        mask_failed = (.!((input_component_diff .- diff_range) .<= ((y1 .- y2) .+ 1e-5)) .|| .!((y1 .- y2) .<= ((input_component_diff .+ diff_range) .+ 1e-5)))
+                        mask_failed = (.!((input_component_diff .- diff_range) .<= ((y1 .- y2) .+ 1e-8)) .|| .!((y1 .- y2) .<= ((input_component_diff .+ diff_range) .+ 1e-8)))
                         mask_failed = mask_failed[:,1]
                     end
                     # Check if outputs are within bounds

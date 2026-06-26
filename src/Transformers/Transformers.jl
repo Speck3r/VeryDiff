@@ -13,6 +13,8 @@ using VeryDiff
 using ..Definitions
 using ..Debugger
 
+const CUTOFF_SIGMOID_SLOPE = 1e-4 # used as a cutoff if abs(slope) smaller then set to 0, otherwise numerical problems
+
 include("Util.jl")
 include("Init.jl")
 include("Single_Transformers.jl")

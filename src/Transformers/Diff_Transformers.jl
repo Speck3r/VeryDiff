@@ -682,7 +682,7 @@ function iterate_nondiff_x_upper!(tangent_points, λ, lower₁, upper₁, lower�
     iteration = fill(true, length(lower₁))
     for i in 1:10
         λ[iteration] = clamp.(fslope_x_upper((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),0,0.25)
-        no_iteration = (abs.(λ) .< 1e-4)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
         tangent_points[iteration] = solve_∂σ_nondiff_∂x_upper((@view λ[iteration]))
         λ[no_iteration] .= 0
@@ -694,7 +694,7 @@ function iterate_nondiff_x_lower!(tangent_points, λ, lower₁, upper₁, lower�
     iteration = fill(true, length(lower₁))
     for i in 1:10
         λ[iteration] = clamp.(fslope_x_lower((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),0,0.25)
-        no_iteration = (abs.(λ) .< 1e-4)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
         tangent_points[iteration] = solve_∂σ_nondiff_∂x_lower((@view λ[iteration]))
         λ[no_iteration] .= 0
@@ -706,7 +706,7 @@ function iterate_nondiff_y_upper!(tangent_points, λ, lower₁, upper₁, lower�
     iteration = fill(true, length(lower₁))
     for i in 1:10
         λ[iteration] = clamp.(fslope_y_upper((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),-0.25,0)
-        no_iteration = (abs.(λ) .< 1e-4)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
         tangent_points[iteration] = solve_∂σ_nondiff_∂y_upper((@view λ[iteration]))
         λ[no_iteration] .= 0
@@ -718,7 +718,7 @@ function iterate_nondiff_y_lower!(tangent_points, λ, lower₁, upper₁, lower�
     iteration = fill(true, length(lower₁))
     for i in 1:10
         λ[iteration] = clamp.(fslope_y_lower((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),-0.25,0)
-        no_iteration = (abs.(λ) .< 1e-4)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
         tangent_points[iteration] = solve_∂σ_nondiff_∂y_lower((@view λ[iteration]))
         λ[no_iteration] .= 0

@@ -93,7 +93,12 @@ function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXSigmoid{S}, i
 end
 
 function σ(x)
-    return 1 ./ (1 .+ exp.(-x))
+    positive = (x .> 0.0)
+    negative = .!positive
+    result = zeros(length(x))
+    result[positive] .= (1 ./ (1 .+ exp.(.- x[positive])))
+    result[negative] .= (exp.(x[negative]) ./ (exp.(x[negative]) .+ 1))
+    return result
 end
 
 function σ´(x)
@@ -101,7 +106,7 @@ function σ´(x)
 end
 
 function solve_σ´(λ, use_upper)
-    if any(λ.==0)
+    if any(λ .== 0)
         throw("λ is zero")
     end
     if use_upper
@@ -112,7 +117,9 @@ function solve_σ´(λ, use_upper)
 end
 
 function fsecant_slope(lower, upper)
-    return clamp.((σ(upper) .- σ(lower)) ./ (upper .- lower), 0, 0.25)
+    secant_slope = clamp.((σ(upper) .- σ(lower)) ./ (upper .- lower), 0, 0.25)
+    secant_slope[secant_slope .< CUTOFF_SIGMOID_SLOPE] .= 0
+    return secant_slope
 end
 
 function iterate_tagent_point(start, fix_point, use_upper)
@@ -120,8 +127,8 @@ function iterate_tagent_point(start, fix_point, use_upper)
     solve_derivative = trues(length(start))
     slope = zeros(length(start))
     for i in 1:10
-        slope[solve_derivative] .= clamp.((σ(tangent_point[solve_derivative]) .- σ(fix_point[solve_derivative])) ./ (tangent_point[solve_derivative] .- fix_point[solve_derivative]), 0, 0.25)
-        solve_derivative .= (slope .> 1e-4)
+        slope[solve_derivative] .= fsecant_slope(tangent_point[solve_derivative], fix_point[solve_derivative])
+        solve_derivative .= (slope .>= CUTOFF_SIGMOID_SLOPE)
         tangent_point[solve_derivative] .= solve_σ´(slope[solve_derivative], use_upper)
         tangent_point[.!solve_derivative] .= start[.!solve_derivative]
     end
@@ -135,9 +142,18 @@ function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXSigmoid{S}, Zin :: Zono
         upper = @view bounds[:,2]
     end
     
+    #println("input_lower = $(lower)")
+    #println("input_upper = $(upper)")
+
     dim = length(lower)
     new_gens = dim
     only_center = (lower .== upper) # handling of this case can be optimised
+
+    #setup data structures
+    iterative_slope_lower = zeros(dim)
+    iterative_slope_upper = zeros(dim)
+    iterative_slope = zeros(dim)
+    tangent_points = zeros(2, dim) #[lower tangent points ,upper tangent points]
 
     #calc secant slope for all 
     secant_slope = fsecant_slope(lower, upper)
@@ -147,12 +163,6 @@ function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXSigmoid{S}, Zin :: Zono
     lower_derivative = σ´(lower)
     secant_upper = @simd_bool_expr dim (secant_slope <= upper_derivative)
     secant_lower = @simd_bool_expr dim (secant_slope <= lower_derivative)
-
-    #setup data structures
-    iterative_slope_lower = zeros(dim)
-    iterative_slope_upper = zeros(dim)
-    iterative_slope = zeros(dim)
-    tangent_points = zeros(2, dim) #[lower tangent points ,upper tangent points]
 
     #calc tangent points and slope iteratively
     mask_iteration = (.!(secant_upper .|| secant_lower))
@@ -224,6 +234,13 @@ function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXSigmoid{S}, Zin :: Zono
     @inbounds for row in axes(A, 1)
         A[row, (generator_offset + row)] = abs(μ[row]) #add new generators
     end
+
+    #output_bounds = zono_bounds(ZoutRef)
+    #output_lower = @view output_bounds[:,1]
+    #output_upper = @view output_bounds[:,2]
+    #println("output_lower = $(output_lower)")
+    #println("output_upper = $(output_upper)")
+
 end
 
 function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXLeakyRelu{S,F}, inputs :: Vector{Zonotope}; lower=nothing, upper=nothing) where {S, F}

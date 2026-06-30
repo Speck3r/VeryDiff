@@ -660,3 +660,53 @@ function propagate_layer!(
         offset = add_∂error_terms!(Zout, trues(dim), ϵ, dim, ∂old_gen, 0)
     end
 end
+
+function propagate_layer!(
+    ZoutRefVec :: Vector{CachedZonotope},
+    Ls :: DiffLayer{
+        <:ONNXSigmoid{S1},
+        <:ONNXSigmoid{S2},
+        <:ONNXSigmoid{S3}},
+    inputs :: Vector{DiffZonotope};
+    bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {S1, S2, S3}
+    @assert length(inputs) == 1 "Activation layer should have exactly one input zonotope"
+    @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output zonotope"
+    ZoutRef = ZoutRefVec[1]
+    Zin = inputs[1]
+
+    @assert !isnothing(bounds_cache)
+    lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper = extract_bounds(Zin, bounds_cache)
+
+    # we just need new generators in every dimension
+    new_gen₁ = length(lower₁)
+    new_gen₂ = length(lower₂)
+    ∂new_gen = length(∂lower)
+
+    Zout, pre_indices_Z₁, pre_indices_Z₂, pre_indices₁, pre_indices₂, ∂pre_indices, post_indices₁, post_indices₂, ∂old_gen = extract_generator_indices(Zin, ZoutRef, new_gen₁, new_gen₂, ∂new_gen)
+
+    L1 = get_layer1(Ls)
+    L2 = get_layer2(Ls)
+    # Compute Zonotopes for individual networks
+    propagate_layer!(Zout.Z₁, L1, Zin.Z₁;lower=lower₁, upper=upper₁)
+    propagate_layer!(Zout.Z₂, L2, Zin.Z₂;lower=lower₂, upper=upper₂)
+
+    if VeryDiff.USE_DIFFZONO[]
+        dim = length(lower₁)
+
+        # Reset to zero
+        Zout.∂Z.c .= 0.0
+        for g in Zout.∂Z.Gs
+            g[:, :] .= 0.0
+        end
+
+        # there is only the general case for GeLU, no linear phases
+        # compute relaxation parameters for GeLU(x) - GeLU(x - Δ)
+        res = gelu_diff_relax_parallel.(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
+        a, b, ϵ = getindex.(res, 1), getindex.(res, 2), getindex.(res, 3)
+        
+        # a*Δ + b ± ϵ
+        updateGeneratorsAddMul!(Zout.∂Z.Gs, ∂pre_indices, Zin.∂Z.Gs, a, trues(dim))  # ∂Z += a * ∂Z
+        Zout.∂Z.c .= a .* Zin.∂Z.c .+ b
+        offset = add_∂error_terms!(Zout, trues(dim), ϵ, dim, ∂old_gen, 0)
+    end
+end

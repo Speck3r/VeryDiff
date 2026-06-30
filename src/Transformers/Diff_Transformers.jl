@@ -622,6 +622,95 @@ function ∂σ_nondiff_∂x(x, y)
     return (exp.(.-x)) ./ ((1 .+ exp.(.-x)) .^2)
 end
 
+function solve_∂σ_nondiff_∂y_upper(λ)
+    return log.((-2 .* λ .+ sqrt.(4 .* λ .+ 1) .- 1) ./ (2 .* λ))
+end
+
+function solve_∂σ_nondiff_∂y_lower(λ)
+    return log.((-2 .* λ .- sqrt.(4 .* λ .+ 1) .- 1) ./ (2 .* λ))
+end
+
+function solve_∂σ_nondiff_∂x_upper(λ)
+    return log.((-2 .* λ .+ sqrt.(1 .- 4 .* λ) .+ 1) ./ (2 .* λ))
+end
+
+function solve_∂σ_nondiff_∂x_lower(λ)
+    return log.((-2 .* λ .- sqrt.(1 .- 4 .* λ) .+ 1) ./ (2 .* λ))
+end
+
+function iterate_nondiff_x_upper!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
+    iteration = fill(true, length(lower₁))
+    for i in 1:10
+        λ[iteration] = clamp.(fslope_x_upper((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),0,0.25)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
+        iteration = .!no_iteration
+        tangent_points[iteration] = solve_∂σ_nondiff_∂x_upper((@view λ[iteration]))
+        λ[no_iteration] .= 0
+        tangent_points[no_iteration] = upper₁[no_iteration]
+    end
+end
+
+function iterate_nondiff_x_lower!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
+    iteration = fill(true, length(lower₁))
+    for i in 1:10
+        λ[iteration] = clamp.(fslope_x_lower((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),0,0.25)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
+        iteration = .!no_iteration
+        tangent_points[iteration] = solve_∂σ_nondiff_∂x_lower((@view λ[iteration]))
+        λ[no_iteration] .= 0
+        tangent_points[no_iteration] = lower₁[no_iteration]
+    end
+end
+
+function iterate_nondiff_y_upper!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
+    iteration = fill(true, length(lower₁))
+    for i in 1:10
+        λ[iteration] = clamp.(fslope_y_upper((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),-0.25,0)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
+        iteration = .!no_iteration
+        tangent_points[iteration] = solve_∂σ_nondiff_∂y_upper((@view λ[iteration]))
+        λ[no_iteration] .= 0
+        tangent_points[no_iteration] = lower₂[no_iteration]
+    end
+end
+
+function iterate_nondiff_y_lower!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
+    iteration = fill(true, length(lower₁))
+    for i in 1:10
+        λ[iteration] = clamp.(fslope_y_lower((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),-0.25,0)
+        no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
+        iteration = .!no_iteration
+        tangent_points[iteration] = solve_∂σ_nondiff_∂y_lower((@view λ[iteration]))
+        λ[no_iteration] .= 0
+        tangent_points[no_iteration] = upper₂[no_iteration]
+    end
+end
+
+function fslope_x_upper(tangent_points, lower₁, upper₁, lower₂, upper₂)
+   return (σ_nondiff(tangent_points, lower₂) .- σ_nondiff(lower₁, lower₂)) ./ (tangent_points .- lower₁)
+end
+
+function fslope_x_lower(tangent_points, lower₁, upper₁, lower₂, upper₂)
+    return (σ_nondiff(tangent_points, upper₂) .- σ_nondiff(upper₁, upper₂)) ./ (tangent_points .- upper₁)
+end
+
+function fslope_y_upper(tangent_points, lower₁, upper₁, lower₂, upper₂)
+    return (σ_nondiff(upper₁, tangent_points) .- σ_nondiff(upper₁, upper₂)) ./ (tangent_points .- upper₂)
+end
+
+function fslope_y_lower(tangent_points, lower₁, upper₁, lower₂, upper₂)
+    return (σ_nondiff(lower₁, tangent_points) .- σ_nondiff(lower₁, lower₂)) ./ (tangent_points .- lower₂)
+end
+
+function set_offset_point!(offset_points, ∂bound, upper₁, lower₁)
+    max_mask = ((lower₁ .<= (∂bound ./ 2)) .&& ((∂bound ./ 2) .<= upper₁))
+    low_mask = ((∂bound ./ 2) .< lower₁)
+    high_mask = (upper₁ .< (∂bound ./ 2))
+    offset_points[max_mask] .= (∂bound[max_mask] ./ 2)
+    offset_points[low_mask] .= (lower₁[low_mask])
+    offset_points[high_mask] .= (upper₁[high_mask])
+end
+
 function propagate_layer!(
     ZoutRefVec :: Vector{CachedZonotope},
     Ls :: DiffLayer{
@@ -666,19 +755,6 @@ function propagate_layer!(
     ∂lower = bounds_cache.∂lower
     ∂upper = bounds_cache.∂upper
     #@info "Bounds Cache: Z₁=[$(lower₁), $(upper₁)], Z₂=[$(lower₂), $(upper₂)], ∂Z=[$(∂lower), $(∂upper)]"
-
-    all_bounds = [lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper]
-
-    for i in 1:length(all_bounds)
-        if any(isnan.(all_bounds[i]))
-            println("some bound is NaN")
-            println(i)
-        end
-        if any(.!isfinite.(all_bounds[i]))
-            println("some bound is Inf/-Inf")
-            println(i)
-        end
-    end
 
     (
         zero_diff,
@@ -763,7 +839,146 @@ function propagate_layer!(
 
         μ_all_cases = zeros(length(upper₁))
 
-        μ_all_cases[all_all_np] .= μ_all_all_np 
+        #c_all_all case
+        updateGeneratorsMul!(Zout.∂Z.Gs, post_indices₂, Zout.Z₂.Gs, (-1.0), c_all_all)
+        Zout.∂Z.c[c_all_all] .= .-Zout.Z₂.c[c_all_all] .+ Zout.Z₁.c[c_all_all]
+
+        #all_c_all case
+        updateGenerators!(Zout.∂Z.Gs, post_indices₁, Zout.Z₁.Gs, all_c_all)
+        Zout.∂Z.c[all_c_all] .= Zout.Z₁.c[all_c_all] .- Zout.Z₂.c[all_c_all]
+
+        # neg_all_any, pos_all_any, any_all_any case
+        npa_all_any = (neg_all_any .|| pos_all_any .|| any_all_any)
+        dim_npa_all_any = length(@view upper₁[npa_all_any])
+        λ_npa_all_any = zeros(dim_npa_all_any)
+        ν_npa_all_any = zeros(dim_npa_all_any)
+        μ_npa_all_np = zeros(dim_npa_all_any)
+        offset_points_upper = zeros(dim_npa_all_any)
+        offset_points_lower = zeros(dim_npa_all_any)
+        lower₁_npa_all_any = @view lower₁[npa_all_any]
+        upper₁_npa_all_any = @view upper₁[npa_all_any]
+        ∂lower_npa_all_any = @view ∂lower[npa_all_any]
+        ∂upper_npa_all_any = @view ∂upper[npa_all_any]
+        set_offset_point!(offset_points_upper, ∂upper_npa_all_any, upper₁_npa_all_any, lower₁_npa_all_any)
+        set_offset_point!(offset_points_lower, ∂lower_npa_all_any, upper₁_npa_all_any, lower₁_npa_all_any)
+        upper_deriv = ∂σ_diff_∂y(offset_points_upper, ∂upper_npa_all_any)
+        lower_deriv = ∂σ_diff_∂y(offset_points_lower, ∂lower_npa_all_any)
+        cutoff_upper = σ_diff(offset_points_upper, ∂upper_npa_all_any) ./ (∂upper_npa_all_any .- ∂lower_npa_all_any)
+        cutoff_lower = .-σ_diff(offset_points_lower, ∂lower_npa_all_any) ./ (∂upper_npa_all_any .- ∂lower_npa_all_any)
+        cutoff = ifelse.(cutoff_lower .< cutoff_upper, cutoff_lower, cutoff_upper)
+        slope = ifelse.(lower_deriv .< upper_deriv, lower_deriv, upper_deriv)
+        λ_npa_all_any = ifelse.(cutoff .< slope, cutoff, slope)
+        μ_npa_all_np = 0.5 .* (.-λ_npa_all_any .* ∂upper_npa_all_any .+ σ_diff(offset_points_upper, ∂upper_npa_all_any)
+        .+λ_npa_all_any .* ∂lower_npa_all_any .- σ_diff(offset_points_lower, ∂lower_npa_all_any))
+        ν_npa_all_any = 0.5 .* (.-λ_npa_all_any .* ∂upper_npa_all_any .+ σ_diff(offset_points_upper, ∂upper_npa_all_any)
+        .-λ_npa_all_any .* ∂lower_npa_all_any .+ σ_diff(offset_points_lower, ∂lower_npa_all_any))
+
+        μ_all_cases[npa_all_any] .= μ_npa_all_np
+
+        updateGeneratorsMul!(Zout.∂Z.Gs, ∂pre_indices, Zin.∂Z.Gs, λ_npa_all_any, npa_all_any) 
+        Zout.∂Z.c[npa_all_any] .= (λ_npa_all_any .* (@view Zin.∂Z.c[npa_all_any])) .+ ν_npa_all_any
+
+
+        # all_all_neg or all_all_pos case
+        all_all_np = (all_all_neg .|| all_all_pos)
+        dim_all_all_np = length((@view upper₁[all_all_np]))
+        λ_x_all_all_np = zeros(dim_all_all_np)
+        λ_y_all_all_np = zeros(dim_all_all_np)
+        ν_all_all_np = zeros(dim_all_all_np)
+        μ_all_all_np = zeros(dim_all_all_np)
+
+        let 
+            upper₁_all_all_np = @view upper₁[all_all_np]
+            lower₁_all_all_np = @view lower₁[all_all_np]
+            upper₂_all_all_np = @view upper₂[all_all_np]
+            lower₂_all_all_np = @view lower₂[all_all_np]
+
+            λ_x = zeros(dim_all_all_np)
+            λ_y = zeros(dim_all_all_np)
+
+            λ_x_upper = zeros(dim_all_all_np)
+            λ_x_lower = zeros(dim_all_all_np)
+            λ_y_upper = zeros(dim_all_all_np)
+            λ_y_lower = zeros(dim_all_all_np)
+
+            tangent_points_x_upper = copy(upper₁_all_all_np)
+            tangent_points_x_lower = copy(lower₁_all_all_np)
+            tangent_points_y_upper = copy(lower₂_all_all_np)
+            tangent_points_y_lower = copy(upper₂_all_all_np)
+
+            intial_derivatives_x_upper = ∂σ_nondiff_∂x(upper₁_all_all_np, lower₂_all_all_np)
+            intial_derivatives_x_lower = ∂σ_nondiff_∂x(lower₁_all_all_np, upper₂_all_all_np)
+            intial_derivatives_y_upper = ∂σ_nondiff_∂y(upper₁_all_all_np, lower₂_all_all_np)
+            intial_derivatives_y_lower = ∂σ_nondiff_∂y(lower₁_all_all_np, upper₂_all_all_np)
+
+            secant_slope_x_upper = fslope_x_upper(upper₁_all_all_np, lower₁_all_all_np, upper₁_all_all_np, lower₂_all_all_np, upper₂_all_all_np)
+            secant_slope_x_lower = fslope_x_lower(lower₁_all_all_np, lower₁_all_all_np, upper₁_all_all_np, lower₂_all_all_np, upper₂_all_all_np)
+            secant_slope_y_upper = fslope_y_upper(lower₂_all_all_np, lower₁_all_all_np, upper₁_all_all_np, lower₂_all_all_np, upper₂_all_all_np)
+            secant_slope_y_lower = fslope_y_lower(upper₂_all_all_np, lower₁_all_all_np, upper₁_all_all_np, lower₂_all_all_np, upper₂_all_all_np)
+
+            use_secant_x_upper = (intial_derivatives_x_upper .>= secant_slope_x_upper)
+            use_secant_x_lower = (intial_derivatives_x_lower .>= secant_slope_x_lower)
+            use_secant_y_upper = (intial_derivatives_y_upper .<= secant_slope_y_upper)
+            use_secant_y_lower = (intial_derivatives_y_lower .<= secant_slope_y_lower)
+
+            need_iteration_x_upper = .!use_secant_x_upper
+            need_iteration_x_lower = .!use_secant_x_lower
+            need_iteration_y_upper = .!use_secant_y_upper
+            need_iteration_y_lower = .!use_secant_y_lower
+
+            λ_x_upper[use_secant_x_upper] = secant_slope_x_upper[use_secant_x_upper]
+            λ_x_lower[use_secant_x_lower] = secant_slope_x_lower[use_secant_x_lower]
+            λ_y_upper[use_secant_y_upper] = secant_slope_y_upper[use_secant_y_upper]
+            λ_y_lower[use_secant_y_lower] = secant_slope_y_lower[use_secant_y_lower]
+
+            iterate_nondiff_x_upper!((@view tangent_points_x_upper[need_iteration_x_upper]), (@view λ_x_upper[need_iteration_x_upper]), (@view lower₁_all_all_np[need_iteration_x_upper]),
+            (@view upper₁_all_all_np[need_iteration_x_upper]), (@view lower₂_all_all_np[need_iteration_x_upper]), (@view upper₂_all_all_np[need_iteration_x_upper]))
+            iterate_nondiff_x_lower!((@view tangent_points_x_lower[need_iteration_x_lower]), (@view λ_x_lower[need_iteration_x_lower]), (@view lower₁_all_all_np[need_iteration_x_lower]),
+            (@view upper₁_all_all_np[need_iteration_x_lower]), (@view lower₂_all_all_np[need_iteration_x_lower]), (@view upper₂_all_all_np[need_iteration_x_lower]))
+            iterate_nondiff_y_upper!((@view tangent_points_y_upper[need_iteration_y_upper]), (@view λ_y_upper[need_iteration_y_upper]), (@view lower₁_all_all_np[need_iteration_y_upper]),
+            (@view upper₁_all_all_np[need_iteration_y_upper]), (@view lower₂_all_all_np[need_iteration_y_upper]), (@view upper₂_all_all_np[need_iteration_y_upper]))
+            iterate_nondiff_y_lower!((@view tangent_points_y_lower[need_iteration_y_lower]), (@view λ_y_lower[need_iteration_y_lower]), (@view lower₁_all_all_np[need_iteration_y_lower]), 
+            (@view upper₁_all_all_np[need_iteration_y_lower]), (@view lower₂_all_all_np[need_iteration_y_lower]), (@view upper₂_all_all_np[need_iteration_y_lower]))
+
+            use_upper_x_slope = (λ_x_upper .<= λ_x_lower)
+            use_upper_y_slope = (λ_y_upper .>= λ_y_lower)
+            use_lower_x_slope = .!use_upper_x_slope
+            use_lower_y_slope = .!use_upper_y_slope
+
+            λ_x[use_upper_x_slope] = λ_x_upper[use_upper_x_slope]
+            λ_x[use_lower_x_slope] = λ_x_lower[use_lower_x_slope]
+            λ_y[use_upper_y_slope] = λ_y_upper[use_upper_y_slope]
+            λ_y[use_lower_y_slope] = λ_y_lower[use_lower_y_slope]
+
+            λ_x_zero = (λ_x .== 0)
+            λ_y_zero = (λ_y .== 0)
+
+            tangent_points_x_upper[use_lower_x_slope .&& λ_x_zero] = upper₁_all_all_np[use_lower_x_slope .&& λ_x_zero]
+            tangent_points_x_upper[use_lower_x_slope .&& .!λ_x_zero] = solve_∂σ_nondiff_∂x_upper((@view λ_x[use_lower_x_slope .&& .!λ_x_zero])) 
+            tangent_points_x_lower[use_upper_x_slope .&& λ_x_zero] = lower₁_all_all_np[use_upper_x_slope .&& λ_x_zero]
+            tangent_points_x_lower[use_upper_x_slope .&& .!λ_x_zero] = solve_∂σ_nondiff_∂x_lower((@view λ_x[use_upper_x_slope .&& .!λ_x_zero]))
+            
+            tangent_points_y_upper[use_lower_y_slope .&& λ_y_zero] = lower₂_all_all_np[use_lower_y_slope .&& λ_y_zero]
+            tangent_points_y_upper[use_lower_y_slope .&& .!λ_y_zero] = solve_∂σ_nondiff_∂y_upper((@view λ_y[use_lower_y_slope .&& .!λ_y_zero]))
+            tangent_points_y_lower[use_upper_y_slope .&& λ_y_zero] = upper₂_all_all_np[use_upper_y_slope .&& λ_y_zero]
+            tangent_points_y_lower[use_upper_y_slope .&& .!λ_y_zero] = solve_∂σ_nondiff_∂y_lower((@view λ_y[use_upper_y_slope .&& .!λ_y_zero]))
+            
+            λ_x_all_all_np .= λ_x
+            λ_y_all_all_np .= λ_y
+
+            ν_all_all_np .= 0.5 .* (.-λ_x .* tangent_points_x_lower .-λ_y .* tangent_points_y_lower .+ σ_nondiff(tangent_points_x_lower, tangent_points_y_lower) 
+            .- λ_x .* tangent_points_x_upper .- λ_y .* tangent_points_y_upper .+ σ_nondiff(tangent_points_x_upper, tangent_points_y_upper))
+            μ_all_all_np .= 0.5 .* (λ_x .* tangent_points_x_lower .+ λ_y .* tangent_points_y_lower .- σ_nondiff(tangent_points_x_lower, tangent_points_y_lower) 
+            .- λ_x .* tangent_points_x_upper .- λ_y .* tangent_points_y_upper .+ σ_nondiff(tangent_points_x_upper, tangent_points_y_upper))
+
+        end
+
+        updateGeneratorsMul!(Zout.∂Z.Gs, pre_indices₁, Zin.Z₁.Gs, λ_x_all_all_np, all_all_np)
+        updateGeneratorsAddMul!(Zout.∂Z.Gs, pre_indices₂, Zin.Z₂.Gs, λ_y_all_all_np, all_all_np)
+        Zout.∂Z.c[all_all_np] .= (λ_x_all_all_np .* (@view Zin.Z₁.c[all_all_np])) .+ (λ_y_all_all_np .* (@view Zin.Z₂.c[all_all_np])) .+ ν_all_all_np
+
+
+        μ_all_cases[all_all_np] .= μ_all_all_np
 
         # Add new generators from c
         dim = length(any_all_any)

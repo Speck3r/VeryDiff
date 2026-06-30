@@ -701,7 +701,7 @@ function propagate_layer!(
 
         # there is only the general case for GeLU, no linear phases
         # compute relaxation parameters for GeLU(x) - GeLU(x - Δ)
-        res = gelu_diff_relax_parallel.(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
+        res = sigmoid_diff_relax_parallel.(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
         a, b, ϵ = getindex.(res, 1), getindex.(res, 2), getindex.(res, 3)
         
         # a*Δ + b ± ϵ

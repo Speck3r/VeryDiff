@@ -1,59 +1,47 @@
 
 
 """ 
-    `dgelu_bounds(l, u)`
+    `σ´_bounds(l, u)`
 
-    Compute the bounds on the derivative of GeLU(x) for x in [l, u].
+    Compute the bounds on the derivative of Sigmoid(x) for x in [l, u].
 
-    The derivative of GeLU is piecewise defined with three pieces:
-    - For x <= -sqrt(2), dGeLU(x) is monotonically decreasing
-    - For -sqrt(2) < x < sqrt(2), dGeLU(x) is monotonically increasing
-    - For x >= sqrt(2), dGeLU(x) is monotonically decreasing
+    The derivative of Sigmoid is piecewise defined with two pieces:
+    - For x <= 0, σ´(x) is monotonically increasing
+    - For x > 0, σ´(x) is monotonically decreasing
 
-    Therefore, to compute the bounds on the derivative, we need to consider the intersection of the interval [l, u] with these three pieces.
+    Therefore, to compute the bounds on the derivative, we need to consider the intersection of the interval [l, u] with these two pieces.
 
     args:
     - `l`: lower bound of the interval
     - `u`: upper bound of the interval
 
     returns:
-    - `∂l`: lower bound on the derivative of GeLU in [l, u]
-    - `∂u`: upper bound on the derivative of GeLU in [l, u]
+    - `∂l`: lower bound on the derivative of Sigmoid in [l, u]
+    - `∂u`: upper bound on the derivative of Sigmoid in [l, u]
 """
-function dgelu_bounds(l, u)
-    ∂l₁, ∂l₂, ∂l₃ =  Inf,  Inf,  Inf
-    ∂u₁, ∂u₂, ∂u₃ = -Inf, -Inf, -Inf
+function σ´_bounds(l, u)
 
-    if l <= min(u, -sqrt(2))
-        # intersect with first interval
-        ∂l₁ = dgelu(-sqrt(2))
-        ∂u₁ = dgelu(l)
+    if l <= 0 && 0 <= u
+        ∂l = σ´(l)
+        ∂u = σ´(0)
+    elseif u <= 0
+        ∂l = σ´(l)
+        ∂u = σ´(u)
+    elseif 0 <= l
+        ∂l = σ´(u)
+        ∂u = σ´(l)
     end
-    if max(l, -sqrt(2)) <= min(u, sqrt(2))
-        # intersect with second interval
-        ∂l₂ = dgelu(max(l, -sqrt(2)))
-        ∂u₂ = dgelu(min(u, sqrt(2)))
-    end
-    if max(l, sqrt(2)) <= u
-        # intersect with third interval
-        ∂l₃ = dgelu(u)
-        ∂u₃ = dgelu(max(l, sqrt(2)))
-    end
-
-    ∂l = min(∂l₁, ∂l₂, ∂l₃)
-    ∂u = max(∂u₁, ∂u₂, ∂u₃)
-
     return ∂l, ∂u
 end
 
 
 """
-    `gelu_diff_relax_parallel(lx, ux, ly, uy, lΔ, uΔ)`
+    `sigmoid_diff_relax_parallel(lx, ux, ly, uy, lΔ, uΔ)`
 
-    Compute parallel linear relaxation for GeLU(x) - GeLU(y) = GeLU(x) - GeLU(x - Δ).
+    Compute parallel linear relaxation for Sigmoid(x) - Sigmoid(y) = Sigmoid(x) - Sigmoid(x - Δ).
     The relaxation is of the form
 
-    a*Δ + b - ϵ ≤ GeLU(x) - GeLU(x - Δ) ≤ a*Δ + b + ϵ
+    a*Δ + b - ϵ ≤ Sigmoid(x) - Sigmoid(x - Δ) ≤ a*Δ + b + ϵ
 
     where a, b, ϵ are computed by this function.
 
@@ -67,13 +55,13 @@ end
     returns:
     - `a`, `b`, `ϵ`: parameters of the parallel linear relaxation
 """
-function gelu_diff_relax_parallel(lx, ux, ly, uy, lΔ, uΔ)
+function sigmoid_diff_relax_parallel(lx, ux, ly, uy, lΔ, uΔ)
     l, u = min(lx, ly), max(ux, uy)
-    ∂l, ∂u = dgelu_bounds(l, u)
+    ∂l, ∂u = σ´_bounds(l, u)
 
-    x₀ = 0
-    f1 = x -> ∂u*(x - x₀) + gelu(x₀)
-    f2 = x -> ∂l*(x - x₀) + gelu(x₀)
+    #x₀ = 0
+    f1 = x -> ∂u*(x) #∂u*(x - x₀) + σ(x₀)
+    f2 = x -> ∂l*(x) #∂l*(x - x₀) + σ(x₀)
 
     if lΔ < 0 && uΔ > 0
         aₗ = (f2(uΔ) - f1(lΔ)) / (uΔ - lΔ)

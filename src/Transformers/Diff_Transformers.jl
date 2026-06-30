@@ -669,6 +669,7 @@ function propagate_layer!(
         <:ONNXSigmoid{S3}},
     inputs :: Vector{DiffZonotope};
     bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {S1, S2, S3}
+    println("using Sigmoid")
     @assert length(inputs) == 1 "Activation layer should have exactly one input zonotope"
     @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output zonotope"
     ZoutRef = ZoutRefVec[1]

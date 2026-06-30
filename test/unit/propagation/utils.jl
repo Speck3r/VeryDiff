@@ -58,7 +58,8 @@ function create_random_dense_network(input_dim::Int, layer_dims::Vector{Int}; ac
             relu_input_id = prev_output_id
             relu_output_id = "output_$layer_count"
             if activation == :relu
-                push!(layers, ONNXRelu([relu_input_id], [relu_output_id], "relu_$layer_count"))
+                #push!(layers, ONNXRelu([relu_input_id], [relu_output_id], "relu_$layer_count"))
+                push!(layers, ONNXSigmoid([relu_input_id], [relu_output_id], "sigmoid_$layer_count"))
             elseif activation == :gelu
                 push!(layers, ONNXGelu([relu_input_id], [relu_output_id], "gelu_$layer_count", "none"))
             else 
@@ -209,6 +210,10 @@ function create_random_layer_mutant(layer :: ONNXLinear{String})
 end
 
 function create_random_layer_mutant(layer :: ONNXRelu{String})
+    return deepcopy(layer)
+end
+
+function create_random_layer_mutant(layer :: ONNXSigmoid{String})
     return deepcopy(layer)
 end
 

@@ -24,32 +24,8 @@ function init_default_zono(Z :: CachedZonotope)
     )
 end
 
-function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXSigmoid{S1}, ONNXSigmoid{S2}, ONNXSigmoid{S3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3}
-    @assert length(inputs) == 1 "Sigmoid DiffLayer should have exactly one input"
-    @assert length(output_positions) == 1 "Sigmoid DiffLayer should have exactly one output"
-    input_zono_cache = inputs[1]
-    input_zono = get_zonotope(input_zono_cache)
-    # Compute Bounds
-    bounds₁ = zono_bounds(input_zono.Z₁)
-    bounds₂ = zono_bounds(input_zono.Z₂)
-    ∂bounds = zono_bounds(input_zono.∂Z)
-    (
-        zero_diff,
-        c_all_all,
-        all_c_all,
-        all_all_neg,
-        all_all_pos,
-        neg_all_any,
-        pos_all_any,
-        any_all_any
-    ) = get_sigmoid_selectors(bounds₁, bounds₂, ∂bounds)
-    # Do NOT use counts created above for new_gen₁ / new_gen₂,
-    # because these omit dimensions where difference is still zero
-    new_gen₁ = length(bounds₁[:,1])
-    new_gen₂ = length(bounds₂[:,1])
-    ∂new_gen = count(all_all_neg) + count(all_all_pos) + count(neg_all_any) + count(pos_all_any) + count(any_all_any)
-    #println("new ∂gen in init:$(∂new_gen)")
-    #println("length only c in init:$(length(c_all_all)+length(all_c_all))")
+function init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS::PropState, diff_layer, output_positions::Vector{Int64}, input_zono, input_zono_cache)
+    # it's called init_relu_zonotope, but really it is applicable to all activation functions
     Z₁ = init_relu_zonotope(PS, input_zono_cache, input_zono.Z₁, new_gen₁, diff_layer.layer_idx)
     Z₂ = init_relu_zonotope(PS, input_zono_cache, input_zono.Z₂, new_gen₂, diff_layer.layer_idx)
     generators_d = Matrix{Float64}[]
@@ -89,7 +65,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXSigmoid{S1}, O
     end
     c = zeros(Float64, size(Z₂.c,1))
     ∂Z = Zonotope(generators_d, c, input_zono.∂Z.influence, generator_ids, find_index_position(generator_ids, owned_generator_id))
-    @assert isnothing(input_zono.∂Z.influence) "Sigmoid DiffLayer does not support influenced zonotopes (yet?)"
+    @assert isnothing(input_zono.∂Z.influence) "Activation DiffLayer does not support influenced zonotopes (yet?)"
     Z = CachedZonotope(
             DiffZonotope(
                 Z₁,
@@ -100,6 +76,25 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXSigmoid{S1}, O
         )
     init_default_zono(Z)
     PS.zono_storage.zonotopes[output_positions[1]] = Z
+end
+
+
+function init_layer!(PS :: PropState, diff_layer :: DiffLayer{<:ONNXSigmoid,<:ONNXSigmoid,<:ONNXSigmoid}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64})
+    @assert length(inputs) == 1 "Poly-Gelu DiffLayer should have exactly one input"
+    @assert length(output_positions) == 1 "Poly-Gelu DiffLayer should have exactly one output"
+    input_zono_cache = inputs[1]
+    input_zono = get_zonotope(input_zono_cache)
+    # Compute Bounds
+    bounds₁ = zono_bounds(input_zono.Z₁)
+    bounds₂ = zono_bounds(input_zono.Z₂)
+    ∂bounds = zono_bounds(input_zono.∂Z)
+
+    # Gelu is non-linear, so we always need a new generator
+    new_gen₁ = size(bounds₁, 1)
+    new_gen₂ = size(bounds₂, 1)
+    ∂new_gen = size(∂bounds, 1)
+
+    init_activation_layer!(new_gen₁, new_gen₂, ∂new_gen, PS, diff_layer, output_positions, input_zono, input_zono_cache)
 end
 
 function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXLeakyRelu{S1,F1}, ONNXLeakyRelu{S2,F2}, ONNXLeakyRelu{S3,F3}}, inputs :: Vector{CachedZonotope}, output_positions :: Vector{Int64}) where {S1, S2, S3, F1, F2, F3}

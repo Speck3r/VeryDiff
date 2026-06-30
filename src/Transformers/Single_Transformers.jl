@@ -93,6 +93,13 @@ function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXSigmoid{S}, i
 end
 
 function σ(x)
+    if length(x) == 1
+        if any(x .> 0.0)
+            return (1 ./ (1 .+ exp.(.- x)))
+        else
+            return (exp.(x) ./ (exp.(x) .+ 1))
+        end
+    end
     positive = (x .> 0.0)
     negative = .!positive
     result = zeros(length(x))

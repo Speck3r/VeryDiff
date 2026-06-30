@@ -593,3 +593,162 @@ function propagate_layer!(
         end
     end
 end
+
+function add_∂error_terms!(Z, mask, ϵs, dim, ∂old_gen, offset)
+    # Add new generators from c
+    c_pos = findall(mask)
+    A = Z.∂Z.Gs[Z.∂Z.owned_generators]
+    @inbounds for i in 1:length(c_pos)
+        row = c_pos[i]
+        col = ∂old_gen + offset + i
+        if mask[row]
+            A[row, col] = ϵs[i]
+        end
+    end
+
+    # TODO: use length of c_pos in offset of next call
+    return offset + length(c_pos)
+end
+
+
+function extract_generator_indices(Zin::DiffZonotope, ZoutRef::CachedZonotope, new_gen₁::Integer, new_gen₂::Integer, ∂new_gen::Integer)
+    # @debug "Instable Neurons: Network 1: $new_gen₁, Network 2: $new_gen₂, Differential: $∂new_gen"
+    Zout_proto = ZoutRef.zonotope_proto # Need this to be able to access the generator ids
+    gen_sizes₁ = zeros(Int64,length(Zout_proto.Z₁.generator_ids))
+    gen_sizes₂ = zeros(Int64,length(Zout_proto.Z₂.generator_ids))
+    ∂gen_sizes = zeros(Int64,length(Zout_proto.∂Z.generator_ids))
+
+    pre_indices_Z₁ = intersect_indices(Zout_proto.Z₁.generator_ids, Zin.Z₁.generator_ids)
+    pre_indices_Z₂ = intersect_indices(Zout_proto.Z₂.generator_ids, Zin.Z₂.generator_ids)
+    pre_indices₁ = intersect_indices(Zout_proto.∂Z.generator_ids, Zin.Z₁.generator_ids)
+    pre_indices₂ = intersect_indices(Zout_proto.∂Z.generator_ids, Zin.Z₂.generator_ids)
+    ∂pre_indices = intersect_indices(Zout_proto.∂Z.generator_ids, Zin.∂Z.generator_ids)
+
+    for (i, idx) in enumerate(pre_indices_Z₁)
+        gen_sizes₁[idx] = size(Zin.Z₁.Gs[i],2)
+    end
+    gen_sizes₁[Zout_proto.Z₁.owned_generators] += new_gen₁
+    for (i, idx) in enumerate(pre_indices_Z₂)
+        gen_sizes₂[idx] = size(Zin.Z₂.Gs[i],2)
+    end
+    gen_sizes₂[Zout_proto.Z₂.owned_generators] += new_gen₂
+    # This mayoverwrite sizes, but columns should be consistent
+    # TODO(steuber): Can we make this cleaner?
+    for (i, idx) in enumerate(∂pre_indices)
+        # @info "Setting ∂Z generator $idx size to $(size(Zin.∂Z.Gs[i],2)) (from ∂Z)"
+        ∂gen_sizes[idx] = size(Zin.∂Z.Gs[i],2)
+    end
+    for (i, idx) in enumerate(pre_indices₁)
+        # @info "Setting ∂Z generator $idx size to $(size(Zin.Z₁.Gs[i],2)) (from Z₁)"
+        ∂gen_sizes[idx] = size(Zin.Z₁.Gs[i],2)
+    end
+    for (i, idx) in enumerate(pre_indices₂)
+        # @info "Setting ∂Z generator $idx size to $(size(Zin.Z₂.Gs[i],2)) (from Z₂)"
+        ∂gen_sizes[idx] = size(Zin.Z₂.Gs[i],2)
+    end
+    # @info "Generator sizes before new gens: Z₁=$(gen_sizes₁), Z₂=$(gen_sizes₂), ∂Z=$(∂gen_sizes)"
+    ∂old_gen = ∂gen_sizes[Zout_proto.∂Z.owned_generators]
+    ∂gen_sizes[Zout_proto.∂Z.owned_generators] += ∂new_gen
+    # Find idx of generators owned by Z₁ and Z₂ in ∂Z
+    idx1 = find_index_position(Zout_proto.∂Z.generator_ids, Zout_proto.Z₁.generator_ids[Zout_proto.Z₁.owned_generators])
+    idx2 = find_index_position(Zout_proto.∂Z.generator_ids, Zout_proto.Z₂.generator_ids[Zout_proto.Z₂.owned_generators])
+    ∂gen_sizes[idx1] += new_gen₁
+    ∂gen_sizes[idx2] += new_gen₂
+    Zout_proto = nothing # Avoid missuse
+    # @info "ReLU DiffZonotope Generators: Z₁=$(gen_sizes₁), Z₂=$(gen_sizes₂), ∂Z=$(∂gen_sizes)"
+    Zout = get_zonotope!(ZoutRef, gen_sizes₁, gen_sizes₂, ∂gen_sizes)
+    post_indices₁ = intersect_indices(Zout.∂Z.generator_ids, Zout.Z₁.generator_ids)
+    post_indices₂ = intersect_indices(Zout.∂Z.generator_ids, Zout.Z₂.generator_ids)
+    
+    return Zout, pre_indices_Z₁, pre_indices_Z₂, pre_indices₁, pre_indices₂, ∂pre_indices, post_indices₁, post_indices₂, ∂old_gen
+end
+
+
+
+function extract_bounds(Zin::DiffZonotope, bounds_cache :: Union{Nothing,BoundsCache}=nothing)
+    # Compute Bounds
+    bounds₁ = zono_bounds(Zin.Z₁)
+    bounds₂ = zono_bounds(Zin.Z₂)
+    ∂bounds = zono_bounds(Zin.∂Z)
+
+    if !bounds_cache.initialized
+        bounds_cache.lower₁ = copy(bounds₁[:,1])
+        bounds_cache.upper₁ = copy(bounds₁[:,2])
+        bounds_cache.lower₂ = copy(bounds₂[:,1])
+        bounds_cache.upper₂ = copy(bounds₂[:,2])
+        bounds_cache.∂lower = copy(∂bounds[:,1])
+        bounds_cache.∂upper = copy(∂bounds[:,2])
+        bounds_cache.initialized = true
+    else
+        bounds_cache.lower₁ .= max.(bounds₁[:,1], bounds_cache.lower₁)
+        bounds_cache.upper₁ .= min.(bounds₁[:,2], bounds_cache.upper₁)
+        bounds_cache.lower₂ .= max.(bounds₂[:,1], bounds_cache.lower₂)
+        bounds_cache.upper₂ .= min.(bounds₂[:,2], bounds_cache.upper₂)
+        bounds_cache.∂lower .= max.(∂bounds[:,1], bounds_cache.∂lower)
+        bounds_cache.∂upper .= min.(∂bounds[:,2], bounds_cache.∂upper)
+    end
+    lower₁ = bounds_cache.lower₁
+    upper₁ = bounds_cache.upper₁
+    lower₂ = bounds_cache.lower₂
+    upper₂ = bounds_cache.upper₂
+    ∂lower = bounds_cache.∂lower
+    ∂upper = bounds_cache.∂upper
+
+    @assert all(lower₁ .<= upper₁) "Invalid bounds for Z₁: lower bound is greater than upper bound - lb₁ = $(lower₁), ub₁ = $(upper₁)"
+    @assert all(lower₂ .<= upper₂) "Invalid bounds for Z₂: lower bound is greater than upper bound - lb₂ = $(lower₂), ub₂ = $(upper₂)"
+    @assert all(∂lower .<= ∂upper) "Invalid bounds for ∂Z: lower bound is greater than upper bound - ∂lb = $(∂lower), ∂ub = $(∂upper)"
+
+    #@info "Bounds Cache: Z₁=[$(lower₁), $(upper₁)], Z₂=[$(lower₂), $(upper₂)], ∂Z=[$(∂lower), $(∂upper)]"
+    return lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper
+end
+
+function propagate_layer!(
+    ZoutRefVec :: Vector{CachedZonotope},
+    Ls :: DiffLayer{
+        <:ONNXSigmoid{S1},
+        <:ONNXSigmoid{S2},
+        <:ONNXSigmoid{S3}},
+    inputs :: Vector{DiffZonotope};
+    bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {S1, S2, S3}
+    println("using Sigmoid")
+    @assert length(inputs) == 1 "Activation layer should have exactly one input zonotope"
+    @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output zonotope"
+    ZoutRef = ZoutRefVec[1]
+    Zin = inputs[1]
+
+    @assert !isnothing(bounds_cache)
+    lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper = extract_bounds(Zin, bounds_cache)
+
+    # we just need new generators in every dimension
+    new_gen₁ = length(lower₁)
+    new_gen₂ = length(lower₂)
+    ∂new_gen = length(∂lower)
+
+    Zout, pre_indices_Z₁, pre_indices_Z₂, pre_indices₁, pre_indices₂, ∂pre_indices, post_indices₁, post_indices₂, ∂old_gen = extract_generator_indices(Zin, ZoutRef, new_gen₁, new_gen₂, ∂new_gen)
+
+    L1 = get_layer1(Ls)
+    L2 = get_layer2(Ls)
+    # Compute Zonotopes for individual networks
+    propagate_layer!(Zout.Z₁, L1, Zin.Z₁;lower=lower₁, upper=upper₁)
+    propagate_layer!(Zout.Z₂, L2, Zin.Z₂;lower=lower₂, upper=upper₂)
+
+    if VeryDiff.USE_DIFFZONO[]
+        dim = length(lower₁)
+
+        # Reset to zero
+        Zout.∂Z.c .= 0.0
+        for g in Zout.∂Z.Gs
+            g[:, :] .= 0.0
+        end
+
+        # there is only the general case for GeLU, no linear phases
+        # compute relaxation parameters for GeLU(x) - GeLU(x - Δ)
+        res = sigmoid_diff_relax_parallel.(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
+        a, b, ϵ = getindex.(res, 1), getindex.(res, 2), getindex.(res, 3)
+        
+        # a*Δ + b ± ϵ
+        updateGeneratorsAddMul!(Zout.∂Z.Gs, ∂pre_indices, Zin.∂Z.Gs, a, trues(dim))  # ∂Z += a * ∂Z
+        Zout.∂Z.c .= a .* Zin.∂Z.c .+ b
+        offset = add_∂error_terms!(Zout, trues(dim), ϵ, dim, ∂old_gen, 0)
+    end
+end

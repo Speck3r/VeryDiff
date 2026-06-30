@@ -20,6 +20,7 @@ const LOOP_ITERATIONS_SINGLE_SIGMOID = 10
 include("Util.jl")
 include("Init.jl")
 include("Single_Transformers.jl")
+include("Sigmoid/SigmoidDifferenceRelaxation.jl")
 include("Diff_Transformers.jl")
 include("Network.jl")
 

@@ -610,11 +610,11 @@ function σ_nondiff(x,y)
     return σ(x) .- σ(y)
 end
 
-function ∂σ_nondiff_∂y(x, y)
+function ∂σ_nondiff_∂y(y)
     return (.-exp.(.-y)) ./ ((1 .+ exp.(.-y)) .^2)
 end
 
-function ∂σ_nondiff_∂x(x, y)
+function ∂σ_nondiff_∂x(x)
     return (exp.(.-x)) ./ ((1 .+ exp.(.-x)) .^2)
 end
 
@@ -635,52 +635,24 @@ function solve_∂σ_nondiff_∂x_lower(λ)
 end
 
 function fslope_x_upper(tangent_points, lower₁, upper₁, lower₂, upper₂)
-    if any((tangent_points .- lower₁) .== 0) 
-        #println("division by zero")
-        #println("tangent_points:")
-        #println(tangent_points[(tangent_points .- lower₁) .== 0])
-        #println("lower₁:")
-        #println(lower₁[(tangent_points .- lower₁) .== 0])
-    end
    return (σ_nondiff(tangent_points, lower₂) .- σ_nondiff(lower₁, lower₂)) ./ (tangent_points .- lower₁)
 end
 
 function fslope_x_lower(tangent_points, lower₁, upper₁, lower₂, upper₂)
-    if any((tangent_points .- upper₁) .== 0)
-        #println("division by zero")
-        #println("tangent_points:")
-        #println(tangent_points[(tangent_points .- upper₁) .== 0])
-        #println("upper₁:")
-        #println(upper₁[(tangent_points .- upper₁) .== 0])
-    end
     return (σ_nondiff(tangent_points, upper₂) .- σ_nondiff(upper₁, upper₂)) ./ (tangent_points .- upper₁)
 end
 
 function fslope_y_upper(tangent_points, lower₁, upper₁, lower₂, upper₂)
-    if any((tangent_points .- upper₂) .== 0) 
-        #println("division by zero")
-        #println("tangent_points:")
-        #println(tangent_points[(tangent_points .- upper₂) .== 0])
-        #println("upper₂:")
-        #println(upper₂[(tangent_points .- upper₂) .== 0])
-    end
     return (σ_nondiff(upper₁, tangent_points) .- σ_nondiff(upper₁, upper₂)) ./ (tangent_points .- upper₂)
 end
 
 function fslope_y_lower(tangent_points, lower₁, upper₁, lower₂, upper₂)
-    if any((tangent_points .- lower₂) .== 0) 
-        #println("division by zero")
-        #println("tangent_points:")
-        #println(tangent_points[(tangent_points .- lower₂) .== 0])
-        #println("lower₂:")
-        #println(lower₂[(tangent_points .- lower₂) .== 0])
-    end
     return (σ_nondiff(lower₁, tangent_points) .- σ_nondiff(lower₁, lower₂)) ./ (tangent_points .- lower₂)
 end
 
 function iterate_nondiff_x_upper!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
     iteration = fill(true, length(lower₁))
-    for i in 1:10
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         λ[iteration] = clamp.(fslope_x_upper((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),0,0.25)
         no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
@@ -688,11 +660,12 @@ function iterate_nondiff_x_upper!(tangent_points, λ, lower₁, upper₁, lower�
         λ[no_iteration] .= 0
         tangent_points[no_iteration] = upper₁[no_iteration]
     end
+    λ[iteration] .= ∂σ_nondiff_∂x(@view tangent_points[iteration])
 end
 
 function iterate_nondiff_x_lower!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
     iteration = fill(true, length(lower₁))
-    for i in 1:10
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         λ[iteration] = clamp.(fslope_x_lower((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),0,0.25)
         no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
@@ -700,11 +673,12 @@ function iterate_nondiff_x_lower!(tangent_points, λ, lower₁, upper₁, lower�
         λ[no_iteration] .= 0
         tangent_points[no_iteration] = lower₁[no_iteration]
     end
+    λ[iteration] .= ∂σ_nondiff_∂x(@view tangent_points[iteration])
 end
 
 function iterate_nondiff_y_upper!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
     iteration = fill(true, length(lower₁))
-    for i in 1:10
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         λ[iteration] = clamp.(fslope_y_upper((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),-0.25,0)
         no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
@@ -712,11 +686,12 @@ function iterate_nondiff_y_upper!(tangent_points, λ, lower₁, upper₁, lower�
         λ[no_iteration] .= 0
         tangent_points[no_iteration] = lower₂[no_iteration]
     end
+    λ[iteration] .= ∂σ_nondiff_∂y(@view tangent_points[iteration])
 end
 
 function iterate_nondiff_y_lower!(tangent_points, λ, lower₁, upper₁, lower₂, upper₂)
     iteration = fill(true, length(lower₁))
-    for i in 1:10
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         λ[iteration] = clamp.(fslope_y_lower((@view tangent_points[iteration]), (@view lower₁[iteration]), (@view upper₁[iteration]), (@view lower₂[iteration]), (@view upper₂[iteration])),-0.25,0)
         no_iteration = (abs.(λ) .< CUTOFF_SIGMOID_SLOPE)
         iteration = .!no_iteration
@@ -724,6 +699,7 @@ function iterate_nondiff_y_lower!(tangent_points, λ, lower₁, upper₁, lower�
         λ[no_iteration] .= 0
         tangent_points[no_iteration] = upper₂[no_iteration]
     end
+    λ[iteration] .= ∂σ_nondiff_∂y(@view tangent_points[iteration])
 end
 
 function ∂σ_diff_∂y(x,y)
@@ -755,10 +731,6 @@ function solve_∂σ_diff_∂y_upper(x, λ)
 end
 
 function solve_∂σ_diff_∂y_lower(x, λ)
-    if any(((exp.(x) .- 2λ .* exp.(x) .- sqrt.(exp.(2x) .- 4λ .* exp.(2x))) ./ (2λ)) .< 0) 
-        #println("x: $(x[((exp.(x) .- 2λ .* exp.(x) .- sqrt.(exp.(2x) .- 4λ .* exp.(2x))) ./ (2λ)) .< 0])")
-        #println("λ: $(λ[((exp.(x) .- 2λ .* exp.(x) .- sqrt.(exp.(2x) .- 4λ .* exp.(2x))) ./ (2λ)) .< 0])")
-    end
     return log.((exp.(x) .- 2λ .* exp.(x) .- sqrt.(exp.(2x) .- 4λ .* exp.(2x))) ./ (2λ))
 end
 
@@ -780,7 +752,7 @@ end
 function iterate_tangent_point_upper!(tangent_points_upper, upper_slope, upper₁, ∂lower)
     use_extremest = (upper₁ .>= (tangent_points_upper ./ 2))
     z_diff = zeros(length(upper_slope))
-    for i in 1:10
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         calc_slope_upper!(upper_slope, tangent_points_upper, upper₁, ∂lower, use_extremest, z_diff)
         calc_tangent_point_upper!(tangent_points_upper, upper_slope, upper₁, use_extremest)
         changed_mask = (.!use_extremest .&& (upper₁ .>= (tangent_points_upper ./ 2)))
@@ -809,7 +781,7 @@ end
 function iterate_tangent_point_lower!(tangent_points_lower, lower_slope, lower₁, ∂upper)
     use_extremest = (lower₁ .<= (tangent_points_lower ./ 2))
     z_diff = zeros(length(lower_slope))
-    for i in 1:10
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         calc_slope_lower!(lower_slope, tangent_points_lower, lower₁, ∂upper, use_extremest, z_diff)
         calc_tangent_point_lower!(tangent_points_lower, lower_slope, lower₁, use_extremest)
         changed_mask = (.!use_extremest .&& (lower₁ .<= (tangent_points_lower ./ 2)))
@@ -873,7 +845,10 @@ function ftangent_point_pos_all_any_upper(λ, solve_derivative, x, mask)
 end
 
 function iteration_pos_all_any_upper!(tangent_points, λ, lower₁, upper₁, ∂lower, ∂upper)
-    for i in 1:10
+    use_extremest = falses(length(lower₁))
+    use_lower_normal = falses(length(lower₁))
+    use_upper_normal = falses(length(lower₁))
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         use_extremest = fuse_extremest(lower₁, tangent_points, upper₁)
         use_lower_normal = fuse_lower_normal(lower₁, tangent_points)
         use_upper_normal = fuse_upper_normal(upper₁, tangent_points)
@@ -886,6 +861,9 @@ function iteration_pos_all_any_upper!(tangent_points, λ, lower₁, upper₁, �
         tangent_points[use_upper_normal] = ftangent_point_pos_all_any_upper(λ, solve_∂σ_diff_∂y_upper, upper₁, use_upper_normal)
         tangent_points[use_lower_normal] = ftangent_point_pos_all_any_upper(λ, solve_∂σ_diff_∂y_upper, lower₁, use_lower_normal)
     end
+    λ[use_extremest] = ∂σ_diff_∂y_extremest(@view tangent_points[use_extremest])
+    λ[use_upper_normal] = ∂σ_diff_∂y(upper₁[use_upper_normal], tangent_points[use_upper_normal])
+    λ[use_lower_normal] = ∂σ_diff_∂y(lower₁[use_lower_normal], tangent_points[use_lower_normal])
 end
 
 function ftangent_point_neg_all_any_lower(λ, solve_derivative, x, mask)
@@ -893,7 +871,10 @@ function ftangent_point_neg_all_any_lower(λ, solve_derivative, x, mask)
 end
 
 function iteration_neg_all_any_lower!(tangent_points, λ, lower₁, upper₁, ∂upper, ∂lower)
-    for i in 1:10
+    use_extremest = falses(length(lower₁))
+    use_lower_normal = falses(length(lower₁))
+    use_upper_normal = falses(length(lower₁))
+    for i in 1:LOOP_ITERATIONS_DIFF_SIGMOID
         use_extremest = fuse_extremest(lower₁, tangent_points, upper₁)
         use_lower_normal = fuse_lower_normal(lower₁, tangent_points)
         use_upper_normal = fuse_upper_normal(upper₁, tangent_points)
@@ -905,7 +886,10 @@ function iteration_neg_all_any_lower!(tangent_points, λ, lower₁, upper₁, �
         tangent_points[use_extremest] = ftangent_point_neg_all_any_lower(λ, solve_extremest_∂σ_diff_∂y_lower, upper₁, use_extremest)
         tangent_points[use_upper_normal] = ftangent_point_neg_all_any_lower(λ, solve_∂σ_diff_∂y_lower, upper₁, use_upper_normal)
         tangent_points[use_lower_normal] = ftangent_point_neg_all_any_lower(λ, solve_∂σ_diff_∂y_lower, lower₁, use_lower_normal)
-    end    
+    end
+    λ[use_extremest] = ∂σ_diff_∂y_extremest(@view tangent_points[use_extremest])
+    λ[use_upper_normal] = ∂σ_diff_∂y(upper₁[use_upper_normal], tangent_points[use_upper_normal])
+    λ[use_lower_normal] = ∂σ_diff_∂y(lower₁[use_lower_normal], tangent_points[use_lower_normal])    
 end
 
 function fmin_z_value(lower₁, upper₁, ∂upper)
@@ -1019,33 +1003,6 @@ function propagate_layer!(
 
     all_bounds = [lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper]
 
-    for i in 1:length(all_bounds)
-        if any(isnan.(all_bounds[i]))
-            println("some bound is NaN")
-            println(i)
-        end
-        if any(.!isfinite.(all_bounds[i]))
-            println("some bound is Inf/-Inf")
-            println(i)
-        end
-    end
-
-    if any(lower₁ .== upper₁)
-        #println("Zono₁ empty?")
-        #println("lower₁/upper₁:$(lower₁[lower₁ .== upper₁])")
-        #println("lower₂:$(lower₂[lower₁ .== upper₁])")
-        #println("upper₂:$(upper₂[lower₁ .== upper₁])")
-        #println("∂lower:$(∂lower[lower₁ .== upper₁])")
-        #println("∂upper:$(∂upper[lower₁ .== upper₁])")
-    end
-    if any(lower₂ .== upper₂)
-        #println("Zono₂ empty?")
-        #println("lower₂/upper₂:$(lower₂[lower₂ .== upper₂])")
-        #println("lower₁:$(lower₁[lower₂ .== upper₂])")
-        #println("upper₁:$(upper₁[lower₂ .== upper₂])")
-        #println("∂lower:$(∂lower[lower₂ .== upper₂])")
-        #println("∂upper:$(∂upper[lower₂ .== upper₂])")
-    end
     (
         zero_diff,
         c_all_all,
@@ -1189,15 +1146,6 @@ function propagate_layer!(
             use_upper_slope = upper_slope .<= lower_slope 
             use_lower_slope = upper_slope .> lower_slope
             λ_any_all_any = ifelse.(use_upper_slope, upper_slope, lower_slope) #final slope
-            if any(λ_any_all_any .== 0)
-                println("slope is 0 somewhere")
-                for i in 1:count(λ_any_all_any .== 0)
-                    if !(isnan(lower₁_any_all_any[λ_any_all_any .== 0][i]) || isnan(upper₁_any_all_any[λ_any_all_any .== 0][i]) || isnan(∂lower_any_all_any[λ_any_all_any .== 0][i]) || isnan(∂upper_any_all_any[λ_any_all_any .== 0][i]))
-                        println("slope is 0 and bounds not nan")
-                    end
-                end
-                println("check complete")
-            end
             calc_tangent_point_lower_opposing!((@view tangent_points_lower[use_upper_slope]), (@view λ_any_all_any[use_upper_slope]), (@view lower₁_any_all_any[use_upper_slope]), (@view ∂lower_any_all_any[use_upper_slope]))
             calc_tangent_point_upper_opposing!((@view tangent_points_upper[use_lower_slope]), (@view λ_any_all_any[use_lower_slope]), (@view upper₁_any_all_any[use_lower_slope]), (@view ∂upper_any_all_any[use_lower_slope]))
             
@@ -1335,10 +1283,10 @@ function propagate_layer!(
             tangent_points_y_upper = copy(lower₂_all_all_np)
             tangent_points_y_lower = copy(upper₂_all_all_np)
 
-            intial_derivatives_x_upper = ∂σ_nondiff_∂x(upper₁_all_all_np, lower₂_all_all_np)
-            intial_derivatives_x_lower = ∂σ_nondiff_∂x(lower₁_all_all_np, upper₂_all_all_np)
-            intial_derivatives_y_upper = ∂σ_nondiff_∂y(upper₁_all_all_np, lower₂_all_all_np)
-            intial_derivatives_y_lower = ∂σ_nondiff_∂y(lower₁_all_all_np, upper₂_all_all_np)
+            intial_derivatives_x_upper = ∂σ_nondiff_∂x(upper₁_all_all_np)
+            intial_derivatives_x_lower = ∂σ_nondiff_∂x(lower₁_all_all_np)
+            intial_derivatives_y_upper = ∂σ_nondiff_∂y(lower₂_all_all_np)
+            intial_derivatives_y_lower = ∂σ_nondiff_∂y(upper₂_all_all_np)
 
             secant_slope_x_upper = fslope_x_upper(upper₁_all_all_np, lower₁_all_all_np, upper₁_all_all_np, lower₂_all_all_np, upper₂_all_all_np)
             secant_slope_x_lower = fslope_x_lower(lower₁_all_all_np, lower₁_all_all_np, upper₁_all_all_np, lower₂_all_all_np, upper₂_all_all_np)
@@ -1416,17 +1364,6 @@ function propagate_layer!(
         end
 
         lambdas = [λ_any_all_any, λ_pos_all_any, λ_neg_all_any, λ_x_all_all_np, λ_y_all_all_np]
-
-        for i in 1:length(lambdas)
-            if any(isnan.(lambdas[i]))
-                println("lambda is NaN")
-                println(i)
-            end
-            if any(.!isfinite.(lambdas[i]))
-                println("lambda is Inf/-Inf")
-                println(i)
-            end
-        end
 
         # Add new generators from c
         dim = length(any_all_any)

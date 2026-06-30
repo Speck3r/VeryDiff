@@ -14,6 +14,8 @@ using ..Definitions
 using ..Debugger
 
 const CUTOFF_SIGMOID_SLOPE = 1e-4 # used as a cutoff if abs(slope) smaller then set to 0, otherwise numerical problems
+const LOOP_ITERATIONS_DIFF_SIGMOID = 10 # determine the number of iterations to search for a tangent point
+const LOOP_ITERATIONS_SINGLE_SIGMOID = 10
 
 include("Util.jl")
 include("Init.jl")

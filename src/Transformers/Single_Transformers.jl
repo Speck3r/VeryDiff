@@ -126,7 +126,7 @@ function iterate_tagent_point(start, fix_point, use_upper)
     tangent_point = start
     solve_derivative = trues(length(start))
     slope = zeros(length(start))
-    for i in 1:10
+    for i in 1:LOOP_ITERATIONS_SINGLE_SIGMOID
         slope[solve_derivative] .= fsecant_slope(tangent_point[solve_derivative], fix_point[solve_derivative])
         solve_derivative .= (slope .>= CUTOFF_SIGMOID_SLOPE)
         tangent_point[solve_derivative] .= solve_σ´(slope[solve_derivative], use_upper)
@@ -198,7 +198,7 @@ function propagate_layer!(ZoutRef :: Zonotope, _L :: ONNXSigmoid{S}, Zin :: Zono
     upper_tangent_points = @view tangent_points[2, :]
     σ_upper = σ(upper_tangent_points)
     σ_lower = σ(lower_tangent_points)
-    #1e-7 to account for floating point precision
+    
     ν = 0.5 .* (.-λ .* upper_tangent_points .+ σ_upper .+ 1e-7 .- λ .* lower_tangent_points .+ σ_lower .- 1e-7)
     ZoutRef.c .= λ .* Zin.c .+ ν
     ZoutRef.c[only_center] .= σ(Zin.c[only_center])

@@ -22,7 +22,7 @@
 function σ´_bounds(l, u)
 
     if l <= 0 && 0 <= u
-        ∂l = σ´(l)
+        ∂l = min(σ´(l),σ´(u))
         ∂u = σ´(0)
     elseif u <= 0
         ∂l = σ´(l)

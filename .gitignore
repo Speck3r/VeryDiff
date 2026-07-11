@@ -2,3 +2,4 @@ VeryDiff
 build.log
 *.log
 NaN_test/
+test/examples/

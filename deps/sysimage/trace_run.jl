@@ -2,6 +2,154 @@ using VeryDiff
 
 sysimage_dir = @__DIR__
 
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.1.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.2.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.3.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.4.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.5.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.1.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.2.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.3.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.4.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/2_20-0.1_Sigmoid-0.5.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.1.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.2.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.3.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.4.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.5.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.5.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.1.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.2.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.3.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.4.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.5.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
+VeryDiff.run_cmd([
+    "--epsilon", "1000000",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid.onnx",
+    "$sysimage_dir/../../test/examples/nets/4_20-0.1_Sigmoid-0.5.onnx",
+    "$sysimage_dir/../../test/examples/specs/sigma_0.1.vnnlib"
+])
+
 # --epsilon 0.05 $sysimage_dir/../../test/examples/nets/ACASXU_run2a_1_1_batch_2000.onnx $sysimage_dir/../../test/examples/nets/ACASXU_run2a_1_1_batch_2000_pruned5.onnx $sysimage_dir/../../test/examples/specs/prop_1.vnnlib
 
 VeryDiff.run_cmd([

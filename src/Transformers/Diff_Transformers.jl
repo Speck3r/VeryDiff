@@ -964,7 +964,6 @@ function propagate_layer!(
         ONNXSigmoid{S3}},
     inputs :: Vector{DiffZonotope};
     bounds_cache :: Union{Nothing,BoundsCache}=nothing) where {S1, S2, S3}
-    #println("Sigmoid Layer")
     @assert length(inputs) == 1 "Sigmoid layer should have exactly one input zonotope"
     @assert length(ZoutRefVec) == 1 "Dense layer should have exactly one output zonotope"
     ZoutRef = ZoutRefVec[1]
@@ -1013,6 +1012,14 @@ function propagate_layer!(
         pos_all_any,
         any_all_any
     ) = get_sigmoid_selectors(bounds₁, bounds₂, ∂bounds)
+    println("zero_diff: $(count(zero_diff))")
+    println("c_all_all: $(count(c_all_all))")
+    println("all_c_all: $(count(all_c_all))")
+    println("all_all_neg: $(count(all_all_neg))")
+    println("all_all_pos: $(count(all_all_pos))")
+    println("neg_all_any: $(count(neg_all_any))")
+    println("pos_all_any: $(count(pos_all_any))")
+    println("any_all_any: $(count(any_all_any))")
     # Do NOT use counts created above for new_gen₁ / new_gen₂,
     # because these omit dimensions where difference is still zero
     new_gen₁ = length(lower₁)

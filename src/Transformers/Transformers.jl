@@ -22,6 +22,7 @@ include("Init.jl")
 include("Single_Transformers.jl")
 include("Diff_Transformers.jl")
 include("Network.jl")
+include("Sigmoid/SigmoidDifferenceRelaxation.jl")
 
 export propagate!
 

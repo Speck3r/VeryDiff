@@ -33,6 +33,14 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXSigmoid{S1}, O
     bounds₁ = zono_bounds(input_zono.Z₁)
     bounds₂ = zono_bounds(input_zono.Z₂)
     ∂bounds = zono_bounds(input_zono.∂Z)
+
+    lower₁ = @view bounds₁[:,1]
+    upper₁ = @view bounds₁[:,2]
+    lower₂ = @view bounds₂[:,1]
+    upper₂ = @view bounds₂[:,2]
+    ∂lower = @view ∂bounds[:,1]
+    ∂upper = @view ∂bounds[:,2]
+
     (
         zero_diff,
         c_all_all,
@@ -42,7 +50,7 @@ function init_layer!(PS :: PropState, diff_layer :: DiffLayer{ONNXSigmoid{S1}, O
         neg_all_any,
         pos_all_any,
         any_all_any
-    ) = get_sigmoid_selectors(bounds₁, bounds₂, ∂bounds)
+    ) = get_sigmoid_selectors(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
     # Do NOT use counts created above for new_gen₁ / new_gen₂,
     # because these omit dimensions where difference is still zero
     new_gen₁ = length(bounds₁[:,1])

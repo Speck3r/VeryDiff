@@ -92,6 +92,14 @@ function propagate_layer!(ZoutRefVec :: Vector{Zonotope}, L :: ONNXSigmoid{S}, i
     return propagate_layer!(ZoutRef, L, Zin; lower=lower, upper=upper)
 end
 
+function σ(x :: Union{Float64, Int64})
+    if x > 0
+        return (1 / (1 + exp(-x)))
+    else
+        return (exp(x) / (exp(x) + 1))
+    end
+end
+
 function σ(x)
     positive = (x .> 0.0)
     negative = .!positive

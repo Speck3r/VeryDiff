@@ -84,13 +84,7 @@ function get_selectors(bounds₁, bounds₂, ∂bounds)
     )
 end
 
-function get_sigmoid_selectors(bounds₁, bounds₂, ∂bounds)
-    lower₁ = @view bounds₁[:,1]
-    upper₁ = @view bounds₁[:,2]
-    lower₂ = @view bounds₂[:,1]
-    upper₂ = @view bounds₂[:,2]
-    ∂lower = @view ∂bounds[:,1]
-    ∂upper = @view ∂bounds[:,2]
+function get_sigmoid_selectors(lower₁, upper₁, lower₂, upper₂, ∂lower, ∂upper)
 
     dim = length(lower₁)
 

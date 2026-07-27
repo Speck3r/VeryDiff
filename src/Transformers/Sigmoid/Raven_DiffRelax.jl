@@ -52,7 +52,7 @@ end
     returns:
     - `a`, `b`, `ϵ`: parameters of the parallel linear relaxation
 """
-function sigmoid_diff_relax_parallel(lx, ux, ly, uy, lΔ, uΔ)
+function sigmoid_raven_diff_relax(lx, ux, ly, uy, lΔ, uΔ)
     l, u = min(lx, ly), max(ux, uy)
     ∂l, ∂u = σ´_bounds(l, u)
 
